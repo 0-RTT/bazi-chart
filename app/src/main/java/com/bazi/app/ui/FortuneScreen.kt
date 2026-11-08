@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,8 +31,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bazi.app.ChartBundle
+import com.bazi.engine.BaziCalculator
+import com.bazi.engine.BaziChart
 import com.bazi.engine.AnnualFortune
 import com.bazi.engine.LuckPillar
+import com.bazi.engine.MonthlyFortune
 import java.time.LocalDate
 
 /**
@@ -47,6 +51,9 @@ fun FortuneTab(bundle: ChartBundle) {
     val currentLuckIndex = chart.luckOfYear(currentYear)?.index ?: -1
 
     var picked by rememberSaveable { mutableIntStateOf(-1) }
+    // 选中哪一年，下方的流月就展开哪一年；未选时跟当前年份走。
+    var pickedYear by rememberSaveable { mutableIntStateOf(-1) }
+    val selectedYear = if (pickedYear > 0) pickedYear else currentYear
     val selectedIndex = if (picked >= 0 && picked <= chart.luckPillars.lastIndex) {
         picked
     } else {
@@ -98,6 +105,8 @@ fun FortuneTab(bundle: ChartBundle) {
                                     AnnualCell(
                                         annual = annual,
                                         current = annual.year == currentYear,
+                                        selected = annual.year == selectedYear,
+                                        onClick = { pickedYear = annual.year },
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -109,6 +118,8 @@ fun FortuneTab(bundle: ChartBundle) {
             }
         }
 
+        item { MonthSection(chart, selectedYear, currentYear) }
+
         item {
             Text(
                 "流年干支以立春为界，非公历元旦；虚岁自出生年计为 1 岁。",
@@ -117,6 +128,75 @@ fun FortuneTab(bundle: ChartBundle) {
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
+    }
+}
+
+/**
+ * 流月。
+ *
+ * 大运 → 流年 → 流月是三级下钻，缺了最后一层，「今年这几个月怎么样」还得另开一个工具。
+ * 月份固定十二个，三列四行：三列让每格宽到能放下「正月」与干支而不挤。
+ */
+@Composable
+private fun MonthSection(chart: BaziChart, year: Int, currentYear: Int) {
+    val months = remember(chart, year) { BaziCalculator.monthliesOf(chart, year) }
+    if (months.isEmpty()) return
+
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        SectionTitle(
+            "流月",
+            trailing = if (year == currentYear) "$year 年 · 本年" else "$year 年"
+        )
+        months.chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                row.forEach { m -> MonthCell(m, Modifier.weight(1f)) }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "月建以节为界，寅月自立春起算，丑月止于次年立春。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun MonthCell(m: MonthlyFortune, modifier: Modifier = Modifier) {
+    val highlight = m.isCurrent
+    Column(
+        modifier = modifier
+            .padding(horizontal = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (highlight) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surface
+            )
+            .border(
+                0.5.dp,
+                if (highlight) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(8.dp)
+            )
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                m.monthName,
+                fontSize = 9.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(4.dp))
+            GanZhiPair(m.gan, m.zhi, fontSize = 15.sp)
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            m.ganTenGod.short + "　" + m.startTime.monthValue + "/" + m.startTime.dayOfMonth,
+            fontSize = 9.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -221,20 +301,28 @@ private fun LuckDetailPanel(luck: LuckPillar, isCurrent: Boolean) {
 }
 
 @Composable
-private fun AnnualCell(annual: AnnualFortune, current: Boolean, modifier: Modifier = Modifier) {
+private fun AnnualCell(
+    annual: AnnualFortune,
+    current: Boolean,
+    selected: Boolean = false,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (current) MaterialTheme.colorScheme.primaryContainer
+                if (current || selected) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surface
             )
             .border(
-                0.5.dp,
-                if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                if (selected) 1.dp else 0.5.dp,
+                if (current || selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outline,
                 RoundedCornerShape(8.dp)
             )
+            .clickable(onClick = onClick)
             .padding(vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
