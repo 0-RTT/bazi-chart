@@ -193,7 +193,7 @@ private fun MonthCell(m: MonthlyFortune, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(2.dp))
         Text(
-            m.ganTenGod.short + "　" + m.startTime.monthValue + "/" + m.startTime.dayOfMonth,
+            m.ganTenGod.cn + "　" + m.startTime.monthValue + "/" + m.startTime.dayOfMonth,
             fontSize = 9.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -334,7 +334,7 @@ private fun AnnualCell(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                annual.ganTenGod.short,
+                annual.ganTenGod.cn,
                 fontSize = 9.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
