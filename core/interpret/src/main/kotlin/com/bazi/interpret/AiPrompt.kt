@@ -52,7 +52,10 @@ object AiPromptBuilder {
         appendLine()
         appendLine("- 性别：$sex")
         appendLine("- 公历（钟表时）：${dateTime(moment.clockTime)}")
-        appendLine("- 真太阳时：${dateTime(moment.trueSolarTime)}")
+        appendLine(
+            "- 真太阳时：${dateTime(moment.trueSolarTime)}" +
+                if (moment.solarTimeApplied) "" else "（未启用，按钟表时定时辰）"
+        )
         appendLine(
             "- 时差校正：经度 %+.1f 分（出生地经度 %.2f°E，东经 120° 基准）、均时差 %+.1f 分%s".format(
                 moment.correction.longitudeMinutes,

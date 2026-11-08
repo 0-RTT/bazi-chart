@@ -369,13 +369,16 @@ private fun MomentPanel(bundle: ChartBundle, modifier: Modifier = Modifier) {
 
         InfoLine("公历", format(moment.clockTime), labelWidth = 52.dp)
         InfoLine("农历", moment.lunar.text, labelWidth = 52.dp)
-        if (moment.trueSolarTime != moment.clockTime) {
+        if (moment.solarTimeApplied) {
             InfoLine(
                 "真太阳时",
                 format(moment.trueSolarTime) +
                     "（%+.0f 分）".format(moment.correction.totalMinutes),
                 labelWidth = 52.dp
             )
+        } else {
+            // 关闭时也占一行：时柱与开启校正的工具对不上时，原因就写在盘上。
+            InfoLine("真太阳时", "未启用（按钟表时定时辰）", labelWidth = 52.dp)
         }
         InfoLine("节气", "${moment.currentTerm.name}　${format(moment.currentTerm.time)}", labelWidth = 52.dp)
         InfoLine("出生地", "${input.city.displayName}　%.2f°E".format(input.city.longitude), labelWidth = 52.dp)

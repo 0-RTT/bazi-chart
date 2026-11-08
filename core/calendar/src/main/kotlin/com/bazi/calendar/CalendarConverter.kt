@@ -34,6 +34,14 @@ data class ResolvedMoment(
     val clockTime: LocalDateTime,
     val trueSolarTime: LocalDateTime,
     val correction: SolarCorrection,
+    /**
+     * 真太阳时校正是否**已应用**。
+     *
+     * 关闭时 [trueSolarTime] 与 [clockTime] 相等，但 [correction] 仍带着算出来的差值——
+     * 界面上「真太阳时」一行若只因时刻不同才显示，就会在关闭时整行消失，
+     * 而 AI 文本又会照旧报一个没被用上的时刻。两种都不对，故单列此标记。
+     */
+    val solarTimeApplied: Boolean,
     val lunar: LunarDateInfo,
     val currentTerm: TermInfo,
     val nextJie: TermInfo,
@@ -84,6 +92,7 @@ object CalendarConverter {
             clockTime = clock,
             trueSolarTime = corrected.trueSolarTime,
             correction = corrected.correction,
+            solarTimeApplied = corrected.applied,
             lunar = toLunarInfo(lunarDay),
             currentTerm = TermInfo(term.getName(), term.getJulianDay().getSolarTime().toLocalDateTime(), term.isJie()),
             nextJie = findNextJie(term),
