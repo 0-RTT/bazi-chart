@@ -138,8 +138,10 @@ private fun PlateTable(chart: BaziChart, analysis: AnalysisResult) {
     val primary = MaterialTheme.colorScheme.primary
 
     // 神煞按宫位归集：一个神煞可能同时落在两柱，需按柱展开而不是按条列。
+    // 「空亡」不在此列——它已有独立一行（按每柱旬空列出），再混进神煞栏是同一件事说两遍。
     val shaByPosition = remember(analysis) {
         analysis.shenSha
+            .filter { it.name != "空亡" }
             .flatMap { hit -> hit.positions.map { it to hit.name } }
             .groupBy({ it.first }, { it.second })
     }
