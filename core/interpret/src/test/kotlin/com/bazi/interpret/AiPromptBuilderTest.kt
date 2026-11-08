@@ -1,6 +1,5 @@
 package com.bazi.interpret
 
-import com.bazi.analysis.ChartAnalyzer
 import com.bazi.calendar.BirthInput
 import com.bazi.calendar.CalendarType
 import com.bazi.calendar.City
@@ -8,112 +7,92 @@ import com.bazi.calendar.Gender
 import com.bazi.calendar.SectConfig
 import com.bazi.calendar.ZiHourSect
 import com.bazi.engine.BaziCalculator
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * 盘面信息文本回归。
+ * 盘面文本回归。
  *
- * 这段文本要整段交给大模型，最怕三件事：
+ * 这段文本要整段交给大模型，最怕四件事：
  * 1. 生成时抛异常（格式化占位符与参数不匹配）；
  * 2. 关键字段遗漏，模型拿到残缺数据后自行脑补；
- * 3. 混进任务指令或规避性话语——按要求本段只陈述盘面，不指挥读者。
+ * 3. 混进任务指令或规避性话语——本段只陈述盘面，不指挥读者；
+ * 4. 混进站不住的推论。神煞查法各家不一，旺衰格局口径更多，
+ *    这些一旦写进文本，就等于把争议当成事实交给模型。
  */
 class AiPromptBuilderTest {
 
     private val beijing = City("北京", "北京", 116.41, 39.90)
 
-    private fun prompt(referenceYear: Int = 2026): String {
-        val chart = BaziCalculator.calculate(
-            BirthInput(
-                calendarType = CalendarType.SOLAR,
-                year = 1986, month = 5, day = 29, hour = 0, minute = 30,
-                gender = Gender.MALE,
-                city = beijing,
-                sect = SectConfig(ziHour = ZiHourSect.LATE, useTrueSolarTime = true)
-            )
+    private fun chart() = BaziCalculator.calculate(
+        BirthInput(
+            calendarType = CalendarType.SOLAR,
+            year = 1986, month = 5, day = 29, hour = 0, minute = 30,
+            gender = Gender.MALE,
+            city = beijing,
+            sect = SectConfig(ziHour = ZiHourSect.LATE, useTrueSolarTime = true)
         )
-        return AiPromptBuilder.build(chart, ChartAnalyzer.analyze(chart), referenceYear)
+    )
+
+    private fun prompt(referenceYear: Int = 2026): String =
+        AiPromptBuilder.build(chart(), referenceYear)
+
+    @Test
+    @DisplayName("四节齐全：排盘、大运、流年、流月")
+    fun sections() {
+        val text = prompt()
+        listOf("## 一、排盘", "## 二、大运", "## 三、流年", "## 四、流月").forEach { title ->
+            assertTrue(text.contains(title), "缺少章节：$title")
+        }
     }
 
     @Test
-    @DisplayName("文本可正常生成，八节表格齐全")
+    @DisplayName("只收基本信息：神煞、旺衰、格局、刑冲合害一概不进文本")
+    fun noInference() {
+        val text = prompt()
+        listOf("神煞", "旺衰", "格局", "调候", "刑冲合害", "古籍", "喜用", "用神").forEach { word ->
+            assertFalse(text.contains(word), "文本不应包含推论项：$word")
+        }
+    }
+
+    @Test
+    @DisplayName("文本可正常生成，四张表齐全且无空值")
     fun generates() {
         val text = prompt()
-        // 古籍移出后篇幅下降，改用结构性判据：八节 + 三张主表，比单纯字数可靠
-        assertTrue(text.length > 2000, "实际长度 ${text.length}")
-        assertTrue(text.lines().count { it.startsWith("| ") } >= 45,
-            "表格行数偏少：${text.lines().count { it.startsWith("| ") }}")
+        val rows = text.lines().count { it.startsWith("| ") }
+        // 四柱 10 行 + 大运 12 行 + 流年 23 行 + 流月 14 行，留出余量取 45
+        assertTrue(rows >= 45, "表格行数偏少：$rows")
         assertFalse(text.contains("\${"), "存在未替换的模板占位符")
         assertFalse(text.contains("null"), "存在 null 值")
         assertFalse(text.contains("NaN"), "存在 NaN")
     }
 
     @Test
-    @DisplayName("八节齐全，且不再含古籍章节")
-    fun sectionsPresent() {
+    @DisplayName("四柱表含主星、藏干、副星、纳音、星运、自坐、空亡与落空")
+    fun pillarRows() {
         val text = prompt()
         listOf(
-            "## 一、出生", "## 二、四柱", "## 三、四柱神煞",
-            "## 四、大运", "## 五、大运神煞", "## 六、流年",
-            "## 七、流年神煞", "## 八、流月"
-        ).forEach { title -> assertTrue(text.contains(title), "缺少章节：$title") }
-        assertFalse(text.contains("古籍"), "盘面文本不应再含古籍章节")
+            "| 主星 |", "| 天干 |", "| 地支 |", "| 藏干 |", "| 副星 |",
+            "| 纳音 |", "| 星运 |", "| 自坐 |", "| 空亡 |", "| 落空 |"
+        ).forEach { row -> assertTrue(text.contains(row), "四柱表缺少行：$row") }
     }
 
     @Test
-    @DisplayName("四柱、日主、藏干、纳音、空亡均在表中")
-    fun chartFields() {
+    @DisplayName("流月为当年十二个月建")
+    fun twelveMonths() {
         val text = prompt()
-        assertTrue(text.contains("丙寅"), "缺年柱")
-        assertTrue(text.contains("癸酉"), "缺日柱")
-        assertTrue(text.contains("癸水"), "缺日主")
-        listOf("藏干", "藏干十神", "纳音", "空亡", "星运").forEach {
-            assertTrue(text.contains(it), "缺字段：$it")
-        }
+        val monthRows = text.lines().count { it.startsWith("| ") && it.contains("月 |") }
+        assertEquals(12, monthRows, "流月应为十二行，实得 $monthRows")
     }
 
     @Test
-    @DisplayName("大运与流年都带纳音、空亡、神煞列")
-    fun luckAndAnnualColumns() {
+    @DisplayName("当前大运与今年各只有一处标记")
+    fun markers() {
         val text = prompt()
-        assertTrue(text.contains("| 大运 | 虚岁 | 公历年 | 干十神 | 支十神 | 星运 | 纳音 | 空亡 | 神煞 |"), "大运表头不符")
-        assertTrue(text.contains("| 年份 | 虚岁 | 干支 | 十神 | 纳音 | 空亡 | 神煞 | 所属大运 |"), "流年表头不符")
-    }
-
-    @Test
-    @DisplayName("流月为参考年十二个月建，寅月起、丑月终")
-    fun monthlies() {
-        val text = prompt(2026)
-        assertTrue(text.contains("## 八、流月（2026 年）"), "缺流月章节或年份不符")
-        assertTrue(text.contains("正月寅月"), "缺正月")
-        assertTrue(text.contains("腊月丑月"), "缺腊月")
-        assertTrue(text.contains("2026-02-0"), "缺立春交节时刻")
-    }
-
-    @Test
-    @DisplayName("十部古籍已全部移出盘面文本")
-    fun noClassics() {
-        val text = prompt()
-        listOf(
-            "滴天髓", "穷通宝鉴", "三命通会", "八字提要", "子平真诠",
-            "天元咸巫", "神峰通考", "千里命稿", "五行精纪", "李虚中命书",
-            "分歧对照"
-        ).forEach { item -> assertFalse(text.contains(item), "不应出现：$item") }
-    }
-
-    @Test
-    @DisplayName("不含任务指令与规避性话语")
-    fun noTasksOrDisclaimers() {
-        val text = prompt()
-        listOf(
-            "请完成以下分析", "输出要求", "请你", "请分析",
-            "仅供参考", "不构成", "不作为", "风险提示",
-            "仅供传统文化研究", "不可作为"
-        ).forEach { banned ->
-            assertFalse(text.contains(banned), "出现了不应有的措辞：$banned")
-        }
+        assertEquals(1, text.lines().count { it.contains("←当前") }, "当前大运应恰有一处标记")
+        assertEquals(1, text.lines().count { it.contains("←今年") }, "今年应恰有一处标记")
     }
 }

@@ -5,9 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -38,62 +35,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bazi.app.ChartBundle
-import com.bazi.interpret.Interpretation
-
-/** 断语页：规则模板生成的解读，按板块分卡。 */
-@Composable
-fun InterpretTab(interpretation: Interpretation) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(interpretation.sections.size) { index ->
-            val section = interpretation.sections[index]
-            Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        section.title,
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        "%02d".format(index + 1),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
-                section.paragraphs.filter { it.isNotBlank() }.forEach { paragraph ->
-                    Text(
-                        paragraph,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                }
-            }
-        }
-        item {
-            Text(
-                "以上文字由内置规则模板生成，每条结论均可追溯到规则编号，不含预测性断言。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
 
 /**
- * 盘面信息页。
+ * 盘面文本页。
  *
  * 排盘完成时这段文本已经生成好了（见 ChartBundle.aiPrompt），
  * 此处只负责呈现与复制——不做二次加工，也不联网。
  *
- * 文本只陈述盘面，不含任务指令，也不含规避性话语；古籍论断在断语页：
- * 读者要拿它做什么，由读者自己决定。
+ * 文本只有四节：排盘、大运、流年、流月。
+ * 不收神煞、旺衰、格局、刑冲合害——那些是推论，各家分歧大；
+ * 也不含任何任务指令，读者要拿它做什么，由读者自己决定。
  */
 @Composable
 fun AiPromptTab(bundle: ChartBundle) {
@@ -115,8 +66,8 @@ fun AiPromptTab(bundle: ChartBundle) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "含四柱与十神、藏干、纳音、空亡、四柱神煞，大运与流年的干支神煞，以及当年十二流月。" +
-                    "全文只陈述盘面，不含任何任务指令；古籍论断在「断语」页。",
+                "四节：排盘（四柱、藏干、副星、纳音、空亡）、大运、流年、流月。" +
+                    "只陈述盘面，不收神煞与任何推论，也不含任务指令。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

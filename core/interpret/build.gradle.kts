@@ -7,7 +7,7 @@ kotlin {
 }
 
 dependencies {
-    api(project(":core:analysis"))
+    api(project(":core:bazi"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

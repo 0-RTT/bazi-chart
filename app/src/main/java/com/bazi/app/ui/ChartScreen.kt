@@ -65,7 +65,9 @@ private val RAIL_WIDTH = 52.dp
 fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val chart = bundle.chart
-    val tabs = listOf("命盘", "运程", "断语", "AI")
+    // 断语页已下线：规则模板给出的判断站不住，与其给一份不准确的解读，
+    // 不如只留可逐格核对的盘面与运程，解读交给使用者自己或外部模型。
+    val tabs = listOf("命盘", "运程", "AI")
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
@@ -91,9 +93,8 @@ fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
         // 末尾几十 dp 滚不到底。
         Box(Modifier.weight(1f).navigationBarsPadding()) {
             when (tab) {
-                0 -> ChartTab(bundle) { tab = 3 }
+                0 -> ChartTab(bundle) { tab = 2 }
                 1 -> FortuneTab(bundle)
-                2 -> InterpretTab(bundle.interpretation)
                 else -> AiPromptTab(bundle)
             }
         }
@@ -489,7 +490,7 @@ private fun AiEntry(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
-                "四柱、藏干、纳音、空亡、神煞、大运流年流月，可直接复制",
+                "四柱、藏干、纳音、空亡，以及大运、流年、流月",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )

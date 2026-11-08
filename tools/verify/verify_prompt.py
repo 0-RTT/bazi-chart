@@ -1,18 +1,13 @@
-"""
-古籍层、盘面文本与关系扫描的规则校验。
+"""盘面文本与流月规则的静态校验。
 
-Kotlin 侧无法在本机构建，所以这里用 Python 把**同一套规则**独立实现一遍，
-对撞口诀与全表；再用静态扫描确认：
-盘面文本里没有任务指令、没有古籍、没有规避语；古籍在断语里；三刑判定已补全。
+分两块：
 
-覆盖：
-1. 五虎遁：十年干 × 十二月建 = 120 组，逐组对撞口诀
-2. 六十纳音的末字必为五元素之一（纳音取五行的唯一依据）
-3. 十二月建的支序：寅卯辰巳午未申酉戌亥子丑
-4. 十部古籍与 Kotlin 枚举逐一对齐
-5. AiPrompt 源码：八节齐全、无任务指令、无规避语、无古籍
-6. Interpreter 源码：古籍参照节存在、分歧对照已移除
-7. Tables.kt：三刑两组、自刑四支、旧的 size==2 判定已清除
+1. 流月——五虎遁全表、月建干支阴阳必配、某一年逐柱对撞；
+2. 盘面文本——四节齐全，且不得混进推论项（神煞、旺衰、格局、调候、刑冲合害）
+   与任务指令、规避语。
+
+文本这一块是机器把关的意义所在：靠人眼守「别把神煞写进去」守不住，
+改一次排版就可能带回来，必须让 CI 拦。
 """
 
 import os
@@ -48,8 +43,6 @@ WU_HU = {
     "戊": "甲", "癸": "甲",
 }
 
-BOOKS = ["滴天髓", "穷通宝鉴", "三命通会", "八字提要", "子平真诠",
-         "天元咸巫", "神峰通考", "千里命稿", "五行精纪", "李虚中命书"]
 
 CORE = os.path.join("core")
 
@@ -121,31 +114,46 @@ def test_nayin():
 
 # ---------------------------------------------------------------- 古籍与文本
 
-def test_classics_enum():
-    src = read("interpret", "src", "main", "kotlin", "com", "bazi", "interpret", "Classics.kt")
-    for b in BOOKS:
-        check(f'"{b}"' in src, f"Classics.kt 缺古籍：{b}")
-    check(src.count("val reading: String") == 1, "ClassicView.reading 定义异常")
-    check("DivergenceAxis" not in src, "分歧对照类型应已移除")
-    check("fun divergences(" not in src, "分歧对照函数应已移除")
-
-
-def test_prompt_purity():
+def test_prompt_sections():
     src = strip_comments(read("interpret", "src", "main", "kotlin", "com", "bazi", "interpret", "AiPrompt.kt"))
 
-    for b in ["请完成以下分析", "输出要求", "请你分析", "请分析",
-              "仅供参考", "不构成", "不作为", "不可作为", "风险提示",
-              "仅供传统文化研究", "你是一位"]:
-        check(b not in src, f"AiPrompt.kt 出现不应有的措辞：{b}")
-
-    for b in BOOKS + ["分歧对照", "古籍"]:
-        check(b not in src, f"AiPrompt.kt 不应再含：{b}")
-
-    for title in ["一、出生", "二、四柱", "三、四柱神煞", "四、大运",
-                  "五、大运神煞", "六、流年", "七、流年神煞", "八、流月"]:
+    # 四节
+    for title in ["一、排盘", "二、大运", "三、流年", "四、流月"]:
         check(title in src, f"AiPrompt.kt 缺章节：{title}")
 
-    check("九、古籍分歧" not in src, "盘面文本不应有第九节")
+    # 推论项一律不得出现
+    for word in ["神煞", "旺衰", "格局", "调候", "刑冲合害", "古籍", "喜用", "用神"]:
+        check(word not in src, f"AiPrompt.kt 不应含推论项：{word}")
+
+    # 任务指令与规避语
+    for word in ["请完成以下分析", "输出要求", "请你分析", "请分析",
+                 "仅供参考", "不构成", "不作为", "不可作为", "风险提示",
+                 "仅供传统文化研究", "你是一位"]:
+        check(word not in src, f"AiPrompt.kt 出现不应有的措辞：{word}")
+
+    # 构建函数签名应收敛为 chart + 参考年，不再依赖分析结果
+    check("analysis: AnalysisResult" not in src, "AiPrompt 不应再依赖 AnalysisResult")
+    check("ShenShaAnalyzer" not in src, "AiPrompt 不应再引用神煞")
+
+
+def test_interpreter_removed():
+    root = os.path.join("core", "interpret", "src", "main", "kotlin", "com", "bazi", "interpret")
+    for gone in ["Interpreter.kt", "Classics.kt", "TextBank.kt"]:
+        check(not os.path.exists(os.path.join(root, gone)), f"断语实现应已删除：{gone}")
+
+    def read_app(*parts):
+        return open(os.path.join("app", "src", "main", "java", "com", "bazi", "app", *parts),
+                    encoding="utf-8").read()
+
+    chart = read_app("ui", "ChartScreen.kt")
+    check("InterpretTab" not in chart, "命盘页仍挂着断语页签")
+    check('"断语"' not in chart, "页签仍含「断语」")
+
+    vm = read_app("BaziViewModel.kt")
+    check("interpretation" not in vm, "ViewModel 仍生成断语")
+
+    analyzer = read("analysis", "src", "main", "kotlin", "com", "bazi", "analysis", "Analyzer.kt")
+    check("overcomeBy()" in analyzer, "Analyzer.favorableElements 未修正官杀取法")
 
 
 def test_interpreter_has_classics():
@@ -189,15 +197,14 @@ def main():
     test_month_cycle()
     test_concrete_2026()
     test_nayin()
-    test_classics_enum()
-    test_prompt_purity()
-    test_interpreter_has_classics()
+    test_prompt_sections()
+    test_interpreter_removed()
     test_relations_source()
     test_lunar_day_text()
 
     print(f"共执行 {CHECKS} 项断言")
     print("  五虎遁 10 组、月建 120 组、2026 丙午年 12 柱")
-    print("  纳音 30 条、十部古籍、盘面八节纯净度、古籍归属、三刑补全、农历日名")
+    print("  纳音 30 条、盘面四节纯净度、断语已下线、三刑补全、农历日名")
     if FAILS:
         print(f"\n失败 {len(FAILS)} 项：")
         for f in FAILS:

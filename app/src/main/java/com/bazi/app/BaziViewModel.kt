@@ -19,8 +19,6 @@ import com.bazi.engine.BaziCalculator
 import com.bazi.engine.BaziChart
 import com.bazi.engine.DiZhi
 import com.bazi.interpret.AiPromptBuilder
-import com.bazi.interpret.Interpretation
-import com.bazi.interpret.Interpreter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,9 +30,9 @@ import kotlinx.coroutines.withContext
 /** 一次排盘的完整结果。 */
 data class ChartBundle(
     val chart: BaziChart,
+    /** 分析结果目前只用于命盘表的神煞行；旺衰、格局、调候不再上屏。 */
     val analysis: AnalysisResult,
-    val interpretation: Interpretation,
-    /** 排盘后自动生成的 AI 分析指令，可直接整段复制给大模型。 */
+    /** 盘面文本，四节：排盘、大运、流年、流月。可直接整段复制给大模型。 */
     val aiPrompt: String
 )
 
@@ -144,8 +142,7 @@ class BaziViewModel(app: Application) : AndroidViewModel(app) {
                     ChartBundle(
                         chart = chart,
                         analysis = analysis,
-                        interpretation = Interpreter.interpret(chart, analysis),
-                        aiPrompt = AiPromptBuilder.build(chart, analysis)
+                        aiPrompt = AiPromptBuilder.build(chart)
                     )
                 }
             }

@@ -36,8 +36,11 @@ jobs:
       - name: 历史存储格式校验
         run: python tools/verify/verify_history.py
 
-      - name: 古籍层与文本纯净度校验
-        run: python tools/verify/verify_classics.py
+      - name: 神煞查法校验
+        run: python tools/verify/verify_shensha.py
+
+      - name: 盘面文本与流月校验
+        run: python tools/verify/verify_prompt.py
 
       - name: 四柱表版式与自坐旬空校验
         run: python tools/verify/verify_plate.py
@@ -87,7 +90,7 @@ jobs:
           fi
 
       - name: 引擎回归测试
-        run: gradle :core:calendar:test :core:bazi:test :core:interpret:test --no-daemon --stacktrace
+        run: gradle :core:calendar:test :core:bazi:test :core:analysis:test :core:interpret:test --no-daemon --stacktrace
 
       - name: 构建 Debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace

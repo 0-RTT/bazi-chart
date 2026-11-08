@@ -13,8 +13,8 @@ android {
         // minSdk 取 26：核心引擎使用 java.time，26 起原生支持，免去 desugaring 依赖
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.5.0"
+        versionCode = 8
+        versionName = "0.6.0"
     }
 
     buildTypes {
