@@ -59,5 +59,9 @@ dependencies {
     implementation(libs.compose.material3)
     debugImplementation(libs.compose.ui.tooling)
 
+    // app 同时用到分析层（命盘表的神煞行）与盘面文本层。
+    // core:interpret 已不依赖 core:analysis，这条传递依赖不再成立，
+    // 必须在这里显式声明——依赖谁就写谁，不吃别人的传递依赖。
+    implementation(project(":core:analysis"))
     implementation(project(":core:interpret"))
 }
