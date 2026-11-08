@@ -84,7 +84,8 @@ class BaziCalculatorTest {
     fun annualCycle() {
         val chart = solarCase()
         assertEquals("丙寅", chart.annuals.first { it.year == 1986 }.ganZhi)
-        assertEquals("甲子", chart.annuals.first { it.year == 1984 }.ganZhi)
+        // 2044 亦为甲子年，且落在 1986..2086 的流年区间内
+        assertEquals("甲子", chart.annuals.first { it.year == 2044 }.ganZhi)
         assertEquals("甲辰", chart.annuals.first { it.year == 2024 }.ganZhi)
     }
 
