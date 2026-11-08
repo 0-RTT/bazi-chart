@@ -1,4 +1,4 @@
-# 八字排盘 · Android（v0.3.0）
+# 八字排盘 · Android（v0.3.1）
 
 面向命理从业者的专业排盘工具。Kotlin + Jetpack Compose，**全程离线**（连 `INTERNET` 权限都没申请）。
 
@@ -232,6 +232,29 @@ $ python tools/verify/verify_history.py
 Material 的 `TopAppBar` 是 64dp 直角矩形 + 直角下沿，和卡片的 16dp 圆角不是一套语言——这就是「顶部直角」的来源。
 换成自定义 `ScreenHeader`：56dp、32dp 圆形返回键、衬线标题 + 副标题；页面内切换从下划线 Tab 换成与「公历/农历」
 同款的胶囊 `Segmented`；面板圆角统一 16dp、分段块 12dp、标签 5dp。
+
+### v0.3.1 补修：头顶那条直角
+
+v0.3.0 换掉了 `TopAppBar`，但真机上头顶仍是直角。原因不在 Compose，在**系统窗口层**：
+
+- `AndroidManifest.xml` 直接挂着平台主题 `@android:style/Theme.Material.Light.NoActionBar`，
+  项目里没有 `res/values/themes.xml`；
+- `MainActivity` 没有调用 `enableEdgeToEdge()`，窗口还在「decor 独占系统栏」的老模式里。
+
+于是状态栏由系统按自己的规则画一层深色底，内容从状态栏下沿才开始，两块拼起来的接缝是一条
+贯穿屏宽的直角硬边——和头部用什么组件完全无关，改多少次 `ScreenHeader` 都不会消失。
+
+修法是三件事：
+
+1. 新增 `res/values/themes.xml` 与 `values-night/themes.xml`，`windowBackground` 对齐
+   Compose 的纸色/夜色，状态栏与导航栏一律 `transparent`；
+2. `MainActivity.onCreate` 首行调用 `enableEdgeToEdge()`，内容铺到系统栏背后，
+   图标明暗按系统深浅色自动切换（与 `isSystemInDarkTheme()` 同源）；
+3. 删掉头部下方那条 0.5dp 全宽分割线 `HeaderDivider`——它本身也是一条两端见方的直线，
+   留白足以分隔。
+
+效果：从屏幕最顶端到第一张卡片之间只有一层连续纸色，没有任何色块边界与直角横线。
+
 
 ---
 

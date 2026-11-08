@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        窗口底色。必须与 Compose 的 colorScheme.background 保持一致：
+        透明状态栏背后露出的就是这一层，色差一点点，头顶就会显出一条分界。
+        值来源：ui/Theme.kt 的 BaziTokens.paper / nightPaper。
+    -->
+    <color name="bazi_window_background">#F7F4EC</color>
+</resources>

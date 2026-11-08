@@ -3,6 +3,7 @@ package com.bazi.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,6 +18,10 @@ import com.bazi.app.ui.InputScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 必须在 super.onCreate 之前：让内容铺到状态栏与导航栏背后，
+        // 状态栏不再由系统单独画一层深色，头顶那条直角分界随之消失。
+        // 图标明暗按系统深浅色自动切换，与 BaziTheme 的 isSystemInDarkTheme() 同源。
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             BaziTheme {

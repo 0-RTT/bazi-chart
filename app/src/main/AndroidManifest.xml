@@ -10,7 +10,7 @@
         android:allowBackup="true"
         android:label="八字排盘"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.BaziChart">
 
         <activity
             android:name=".MainActivity"

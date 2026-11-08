@@ -72,6 +72,10 @@ fun Panel(
  * 不用 Material 的 TopAppBar：那套是 64dp 平板矩形 + 直角下沿，
  * 在纸感版式里显得硬。这里换成「圆形返回键 + 衬线标题 + 副标题」，
  * 高度收到 56dp，与卡片的大圆角语言对齐。
+ *
+ * 头部与内容之间不画分割线：一条贯穿屏宽的 0.5dp 直线，正好把「直角」
+ * 重新请回来——留白本身就是分隔。配合 enableEdgeToEdge，状态栏、头部、
+ * 内容共用同一层纸色，从屏幕顶端到第一张卡片之间没有任何硬边。
  */
 @Composable
 fun ScreenHeader(
@@ -131,12 +135,6 @@ fun ScreenHeader(
 
         actions()
     }
-}
-
-/** 头部与内容之间的分隔线。 */
-@Composable
-fun HeaderDivider() {
-    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
 }
 
 /** 小节标题：左侧一道朱砂短线 + 标题，右侧可挂辅助文字或操作。 */

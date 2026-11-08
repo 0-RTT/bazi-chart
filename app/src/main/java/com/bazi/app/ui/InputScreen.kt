@@ -74,7 +74,6 @@ fun InputScreen(state: UiState, viewModel: BaziViewModel) {
             title = "八字排盘",
             subtitle = "子平法 · 真太阳时 · 全离线"
         )
-        HeaderDivider()
 
         Column(
             modifier = Modifier

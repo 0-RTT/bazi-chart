@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        应用主题。
+
+        之前这里空着，Manifest 直接用平台主题 @android:style/Theme.Material.Light.NoActionBar，
+        结果就是：状态栏由系统按它自己的深色规则绘制，内容从状态栏下沿开始，
+        两块拼在一起的接缝是一条贯穿屏宽的直角硬边——这就是「头顶还是直角」的来历。
+
+        现在改成：状态栏/导航栏一律透明，窗口底色对齐 Compose 的纸色，
+        内容直接铺到状态栏背后，视觉上不再有第二层色块。
+        图标明暗由 MainActivity 的 enableEdgeToEdge() 在运行时按系统深浅色刷新。
+    -->
+    <style name="Theme.BaziChart" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- 冷启动时先画这层，避免闪一下系统白 -->
+        <item name="android:windowBackground">@color/bazi_window_background</item>
+        <item name="android:colorBackground">@color/bazi_window_background</item>
+
+        <!-- 系统栏交给内容，不画自己的底色 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+
+        <!-- 浅色底配深色图标（深色主题在 values-night 覆盖） -->
+        <item name="android:windowLightStatusBar">true</item>
+
+        <!-- 刘海/挖孔屏：内容延伸到安全区外，由 Compose 的 insets 负责留白 -->
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="p">shortEdges</item>
+    </style>
+</resources>

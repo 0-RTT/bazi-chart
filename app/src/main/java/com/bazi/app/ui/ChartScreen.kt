@@ -71,7 +71,6 @@ fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
             },
             onBack = onBack
         )
-        HeaderDivider()
 
         Segmented(
             options = tabs,
