@@ -56,6 +56,18 @@ jobs:
         with:
           gradle-version: "8.7"
 
+      # 兜底：万一 setup-gradle 未把 gradle 放进 PATH，直接下载发行版。
+      - name: 确认 Gradle 可用
+        run: |
+          if command -v gradle >/dev/null 2>&1; then
+            gradle --version
+          else
+            curl -sSL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
+            unzip -q /tmp/gradle.zip -d "$HOME/gradle-dist"
+            echo "$HOME/gradle-dist/gradle-8.7/bin" >> "$GITHUB_PATH"
+            "$HOME/gradle-dist/gradle-8.7/bin/gradle" --version
+          fi
+
       - name: 引擎回归测试
         run: gradle :core:bazi:test --no-daemon --stacktrace
 
