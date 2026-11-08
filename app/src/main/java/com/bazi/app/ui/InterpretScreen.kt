@@ -92,7 +92,7 @@ fun InterpretTab(interpretation: Interpretation) {
  * 排盘完成时这段文本已经生成好了（见 ChartBundle.aiPrompt），
  * 此处只负责呈现与复制——不做二次加工，也不联网。
  *
- * 文本只陈述盘面与古籍分歧，不含任务指令，也不含规避性话语：
+ * 文本只陈述盘面，不含任务指令，也不含规避性话语；古籍论断在断语页：
  * 读者要拿它做什么，由读者自己决定。
  */
 @Composable
@@ -115,8 +115,8 @@ fun AiPromptTab(bundle: ChartBundle) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "含四柱与十神、藏干、纳音、空亡、四柱神煞，大运与流年的干支神煞，当年十二流月，" +
-                    "以及十部古籍对本盘的各家论断与分歧对照。全文只陈述盘面，不含任何任务指令。",
+                "含四柱与十神、藏干、纳音、空亡、四柱神煞，大运与流年的干支神煞，以及当年十二流月。" +
+                    "全文只陈述盘面，不含任何任务指令；古籍论断在「断语」页。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -169,7 +169,7 @@ fun AiPromptTab(bundle: ChartBundle) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(2.dp))
             Text(
-                "提示：全文较长，粘贴后请确认末尾的「分歧对照」已完整带入。",
+                "提示：全文较长，粘贴后请确认末尾的「流月」已完整带入。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

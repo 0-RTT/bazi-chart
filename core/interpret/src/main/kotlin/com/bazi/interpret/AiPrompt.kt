@@ -17,10 +17,9 @@ import java.time.LocalDateTime
  * 盘面信息生成器。
  *
  * 只给数据，不给指令：不写「请分析」，不写「仅供参考」，也不替读者划定边界。
- * 内容分十节：出生、四柱、四柱神煞、大运、大运神煞、流年、流年神煞、流月、古籍分歧。
+ * 内容分八节：出生、四柱、四柱神煞、大运、大运神煞、流年、流年神煞、流月。
  *
- * 其中「古籍分歧」一节是把十部古籍的方法论落到本盘上——既逐部给论断，
- * 也把真正的分歧轴（命主取日还是取年、用神从何处取、神煞与纳音算不算数）摊开对照。
+ * 古籍论断不在这里——那是解读，属于断语页。
  *
  * 纯 Kotlin，无 Android 依赖，可在 JVM 上直接断言文本内容。
  */
@@ -45,7 +44,6 @@ object AiPromptBuilder {
         appendAnnuals(chart, referenceYear)
         appendAnnualShenSha(chart, referenceYear)
         appendMonthlies(chart, referenceYear)
-        appendClassics(chart, analysis, referenceYear)
     }
 
     // ------------------------------------------------------------ 一、出生
@@ -109,8 +107,7 @@ object AiPromptBuilder {
         appendLine()
         appendLine(
             "刑冲合害：" + if (a.relations.isEmpty()) "四柱地支之间无明显冲、合、刑、害"
-            else a.relations.distinctBy { it.type to it.note }
-                .joinToString("；") { "${it.type.cn} ${it.note}" }
+            else a.relations.distinctBy { it.note }.joinToString("；") { it.note }
         )
         appendLine()
     }
@@ -243,37 +240,6 @@ object AiPromptBuilder {
                 "| ${m.naYin} | ${if (m.isEmptyBranch) "空" else "—"} " +
                 "| ${dateTime(m.startTime)} | ${dateTime(m.endTime)} |"
         )
-    }
-
-    // ------------------------------------------------------------ 九、古籍分歧
-
-    private fun StringBuilder.appendClassics(chart: BaziChart, a: AnalysisResult, referenceYear: Int) {
-        appendLine("## 九、古籍分歧")
-        appendLine()
-        appendLine("以下十部对同一命盘各有取法，结论并不一致。")
-        appendLine()
-
-        ClassicReader.read(chart, a, referenceYear).forEach { view ->
-            val c = view.classic
-            appendLine("### ${c.book}（${c.author}·${c.era}）")
-            appendLine()
-            appendLine("- 系统：${c.school}")
-            appendLine("- 主张：${c.creed}")
-            appendLine("- 取法：${c.method}")
-            appendLine("- 本盘论断：${view.reading}")
-            appendLine("- 分歧：${view.divergence}")
-            appendLine()
-        }
-
-        appendLine("### 分歧对照")
-        appendLine()
-        ClassicReader.divergences(chart, a).forEach { axis ->
-            appendLine("**${axis.topic}**")
-            appendLine()
-            appendLine("- 各家立场：${axis.camps}")
-            appendLine("- 本盘上的差别：${axis.onThisChart}")
-            appendLine()
-        }
     }
 
     // ------------------------------------------------------------ 工具

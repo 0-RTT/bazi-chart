@@ -50,12 +50,6 @@ object CalendarConverter {
 
     private val PROVIDER_LOCK = Any()
 
-    private val MONTH_NAMES = arrayOf(
-        "正月", "二月", "三月", "四月", "五月", "六月",
-        "七月", "八月", "九月", "十月", "冬月", "腊月"
-    )
-    private val DAY_TENS = arrayOf("初", "十", "廿", "三")
-    private val DIGITS = arrayOf("十", "一", "二", "三", "四", "五", "六", "七", "八", "九")
     private const val ZODIAC = "鼠牛虎兔龙蛇马羊猴鸡狗猪"
 
     /**
@@ -135,22 +129,15 @@ object CalendarConverter {
             text = buildString {
                 append(yearGanZhi).append('年')
                 if (isLeap) append("闰")
-                append(MONTH_NAMES.getOrElse(monthValue - 1) { "${monthValue}月" })
-                append(dayText(day.day))
+                append(LunarText.monthName(monthValue))
+                append(LunarText.dayName(day.day))
             },
             yearGanZhi = yearGanZhi,
             zodiac = ZODIAC[((branchIndex % 12) + 12) % 12].toString()
         )
     }
 
-    private fun dayText(day: Int): String = when {
-        day == 10 -> "初十"
-        day == 20 -> "二十"
-        day == 30 -> "三十"
-        day in 1..9 -> DAY_TENS[0] + DIGITS[day]
-        day in 11..19 -> "十" + DIGITS[day - 10]
-        day in 21..29 -> "廿" + DIGITS[day - 20]
-        else -> "${day}日"
+日"
     }
 
 }

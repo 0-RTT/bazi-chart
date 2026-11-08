@@ -53,7 +53,7 @@ object Interpreter {
         sections += palaces(chart, dedup)
         sections += relations(chart, analysis, dedup)
         sections += fortune(chart, analysis, referenceYear, dedup)
-        sections += classicsSection(chart, analysis, dedup)
+        sections += classicsSection(chart, analysis, referenceYear, dedup)
         sections += disclaimer()
 
         return Interpretation(sections, dedup)
@@ -215,16 +215,27 @@ object Interpreter {
         return Section("取用取舍", paragraphs)
     }
 
-    // ---------------------------------------------------------- 古籍分歧
+    // ---------------------------------------------------------- 古籍参照
 
-    /** 十家对同一盘的分歧，取四条主轴，每条都落到本盘的具体干支。 */
-    private fun classicsSection(chart: BaziChart, a: AnalysisResult, ids: MutableList<String>): Section {
-        val axes = ClassicReader.divergences(chart, a)
-        val paragraphs = axes.map { "${it.topic}——${it.onThisChart}" } +
-            "十家的完整论断（滴天髓、穷通宝鉴、三命通会、八字提要、子平真诠、" +
-            "天元咸巫、神峰通考、千里命稿、五行精纪、李虚中命书）见「AI」页。"
-        ids += "classics.divergence"
-        return Section("古籍分歧", paragraphs)
+    /**
+     * 十部古籍对本盘的论断。
+     *
+     * 每部书只用自己的判据说话：子平真诠看月令格局，穷通宝鉴看寒暖，
+     * 神峰通考找病，李虚中则干脆换一个「我」。分歧本身不另立小节，
+     * 但把十段并排读，差异自然显出来。
+     */
+    private fun classicsSection(
+        chart: BaziChart,
+        a: AnalysisResult,
+        referenceYear: Int,
+        ids: MutableList<String>
+    ): Section {
+        val views = ClassicReader.read(chart, a, referenceYear)
+        ids += "classics"
+        return Section(
+            "古籍参照",
+            views.map { "${it.classic.book}（${it.classic.author}）——${it.reading}" }
+        )
     }
 
     // ---------------------------------------------------------- 六亲宫位
@@ -264,6 +275,7 @@ object Interpreter {
     private fun relationEffect(type: RelationType): String = when (type) {
         RelationType.LIU_HE -> "合则有情，牵绊中带助力，也主事情不易干净了断。"
         RelationType.SAN_HE -> "三合成局，力量集中，该五行之势大增。"
+        RelationType.BAN_HE -> "半合为局之半，有其意而未成其势，多主一半的助力，也主事倍功半。"
         RelationType.SAN_HUI -> "三会成方，气势最盛，往往决定命局的主要性格。"
         RelationType.LIU_CHONG -> "冲则动，主动荡、迁移、变动，冲在哪一宫，哪一段人生就容易翻动。"
         RelationType.XIANG_XING -> "刑主纠缠与反复，事情容易绕回原点，宜以规则化解。"

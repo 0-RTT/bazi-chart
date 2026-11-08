@@ -79,17 +79,7 @@ enum class Classic(
 data class ClassicView(
     val classic: Classic,
     /** 针对本盘的具体论断。 */
-    val reading: String,
-    /** 与别家分歧之处。 */
-    val divergence: String
-)
-
-/** 一条真正的分歧轴。 */
-data class DivergenceAxis(
-    val topic: String,
-    val camps: String,
-    /** 落到本盘上，各种取法各自得出什么。 */
-    val onThisChart: String
+    val reading: String
 )
 
 /**
@@ -115,50 +105,6 @@ object ClassicReader {
         qianLiMingGao(chart, a),
         wuXingJingJi(chart, a),
         liXuZhong(chart, a)
-    )
-
-    fun divergences(chart: BaziChart, a: AnalysisResult): List<DivergenceAxis> = listOf(
-        DivergenceAxis(
-            topic = "命主是谁：日干还是年干",
-            camps = "以日干为主：滴天髓、子平真诠、穷通宝鉴、神峰通考、千里命稿、八字提要、三命通会；" +
-                "以年干为本：李虚中命书、五行精纪、天元咸巫",
-            onThisChart = run {
-                val yearElement = chart.yearPillar.gan.wuXing
-                val yearPercent = a.strength.elementScores.first { it.wuXing == yearElement }.percent
-                "按子平法看日主${chart.dayMaster.cn}${chart.dayMaster.wuXing.cn}，结论是${a.strength.level.cn}；" +
-                    "若依古法改以年干${chart.yearPillar.gan.cn}${yearElement.cn}为命主，该气占 " +
-                    "%.1f%%，".format(yearPercent * 100) +
-                    if (yearPercent >= 0.3) "其势不弱，根基可取" else "其气偏轻，古法会判本命根基薄"
-            }
-        ),
-        DivergenceAxis(
-            topic = "用神从哪里取",
-            camps = "月令格局取用：子平真诠；调候取用：穷通宝鉴；病药取用：神峰通考；气势顺逆取用：滴天髓",
-            onThisChart = run {
-                val patternUse = a.pattern.tenGod?.cn ?: "月令本气"
-                val tiaoUse = a.tiaohou.entry?.primary?.cn ?: "无特定调候之需"
-                val illness = diagnose(chart, a)
-                "子平真诠会取${patternUse}为用；穷通宝鉴先取${tiaoUse}以解寒暖；" +
-                    "神峰通考判「${illness.name}」，主张以${illness.cure}去病为先；" +
-                    "滴天髓不问格名，只看气势宜泄宜帮。四条路子在同一个字上会分家。"
-            }
-        ),
-        DivergenceAxis(
-            topic = "神煞算不算数",
-            camps = "列为参看：三命通会、五行精纪、天元咸巫；明确贬斥：子平真诠、神峰通考、滴天髓",
-            onThisChart = run {
-                val names = a.shenSha.filter { it.name != "空亡" }.map { it.name }.distinct()
-                val text = if (names.isEmpty()) "本局未见常用神煞" else "本局见" + names.joinToString("、")
-                "$text。三命通会会据此参断吉凶；子平真诠与神峰通考则认为神煞不足凭，" +
-                    "格局与病药既已分明，神煞只作旁证"
-            }
-        ),
-        DivergenceAxis(
-            topic = "纳音用不用",
-            camps = "以纳音论禀赋：五行精纪、李虚中命书、天元咸巫；视为古法不用：子平真诠以降的格局派",
-            onThisChart = "年柱纳音${chart.yearPillar.naYin}、日柱纳音${chart.dayPillar.naYin}，" +
-                "古法会以二者生克论根基与自身之气是否相承；格局派则完全不计纳音，只论干支五行"
-        )
     )
 
     // ---------------------------------------------------------------- 十家
@@ -199,9 +145,7 @@ object ClassicReader {
 
         return ClassicView(
             classic = Classic.DI_TIAN_SUI,
-            reading = reading,
-            divergence = "滴天髓不承认「格」有独立价值，与子平真诠专主月令取格正相反：" +
-                "同一张盘，它先问「气往何处去」，子平真诠先问「月令何神当权」。"
+            reading = reading
         )
     }
 
@@ -229,9 +173,7 @@ object ClassicReader {
         }
         return ClassicView(
             classic = Classic.QIONG_TONG_BAO_JIAN,
-            reading = reading,
-            divergence = "调候派第一句问的是「冷不冷、燥不燥」，不是「身强身弱」；" +
-                "若调候用神与扶抑用神不是同一个字，本书会毫不犹豫取调候。"
+            reading = reading
         )
     }
 
@@ -250,9 +192,7 @@ object ClassicReader {
         }
         return ClassicView(
             classic = Classic.SAN_MING_TONG_HUI,
-            reading = reading,
-            divergence = "本书是「都收」的路子，与子平真诠「力斥神煞」、神峰通考「神煞谬说」直接对立：" +
-                "同一颗天乙贵人，本书算一层福气，两家只当闲字。"
+            reading = reading
         )
     }
 
@@ -286,9 +226,7 @@ object ClassicReader {
         }
         return ClassicView(
             classic = Classic.BA_ZI_TI_YAO,
-            reading = reading,
-            divergence = "本书与穷通宝鉴同重月令，但更看重「运来引动」：" +
-                "同样的用神，柱中有与柱中无，在它笔下是两个完全不同的命。"
+            reading = reading
         )
     }
 
@@ -310,9 +248,7 @@ object ClassicReader {
 
         return ClassicView(
             classic = Classic.ZI_PING_ZHEN_QUAN,
-            reading = reading,
-            divergence = "本书是十家里最「唯格」的一路：格成则贱命亦许其贵，格破则贵格亦断其滞。" +
-                "它与神峰通考的病药说、滴天髓的气势说，构成清代以来最大的三条分歧线。"
+            reading = reading
         )
     }
 
@@ -335,9 +271,7 @@ object ClassicReader {
 
         return ClassicView(
             classic = Classic.TIAN_YUAN_XIAN_WU,
-            reading = reading,
-            divergence = "古法看的是「你生在哪一年」，子平看的是「你生在哪一天」：" +
-                "一个论家世根基，一个论自身作为，两套语言说的不是同一件事。"
+            reading = reading
         )
     }
 
@@ -354,9 +288,7 @@ object ClassicReader {
         }
         return ClassicView(
             classic = Classic.SHEN_FENG_TONG_KAO,
-            reading = reading,
-            divergence = "本书最激烈地反对两件事：拘泥格名、滥用神煞。它认为格不过是名、病才是实，" +
-                "这一点与子平真诠、三命通会同时相左。"
+            reading = reading
         )
     }
 
@@ -387,9 +319,7 @@ object ClassicReader {
 
         return ClassicView(
             classic = Classic.QIAN_LI_MING_GAO,
-            reading = reading,
-            divergence = "民国实务派把「用神」从形而上的概念降为可称量的东西：有力即吉，无力即否。" +
-                "与滴天髓讲气脉、子平真诠讲格调相比，它最不讲道理，却最便于实用。"
+            reading = reading
         )
     }
 
@@ -418,9 +348,7 @@ object ClassicReader {
 
         return ClassicView(
             classic = Classic.WU_XING_JING_JI,
-            reading = reading,
-            divergence = "纳音讲材质——「炉中火」与「山下火」同是火而性不同；" +
-                "子平派自清代起就把纳音视为不急之务，两家对同一柱的解读可以完全不相干。"
+            reading = reading
         )
     }
 
@@ -447,10 +375,7 @@ object ClassicReader {
 
         return ClassicView(
             classic = Classic.LI_XU_ZHONG,
-            reading = reading,
-            divergence = "这是十家里最根本的一条分歧：李虚中以年干为命主，子平法以日干为命主。" +
-                "同一张盘，两家认的「我」根本不是同一个字，旺衰、用神、六亲的结论都可能完全不同——" +
-                "不是谁算错，而是出发点不同。"
+            reading = reading
         )
     }
 

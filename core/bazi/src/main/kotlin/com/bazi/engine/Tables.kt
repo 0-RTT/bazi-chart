@@ -143,7 +143,7 @@ object GrowthPhaseTable {
 
 /** 地支关系的种类。 */
 enum class RelationType(val cn: String) {
-    LIU_HE("六合"), SAN_HE("三合"), SAN_HUI("三会"),
+    LIU_HE("六合"), SAN_HE("三合"), BAN_HE("半合"), SAN_HUI("三会"),
     LIU_CHONG("六冲"), XIANG_XING("相刑"), LIU_HAI("六害")
 }
 
@@ -172,6 +172,7 @@ object BranchRelations {
         DiZhi.MAO to DiZhi.CHEN, DiZhi.SHEN to DiZhi.HAI, DiZhi.YOU to DiZhi.XU
     ).map { (a, b) -> setOf(a, b) }
 
+    /** 三合局，顺序为「生、旺、墓」，中间一支是旺神，半合必须含它。 */
     private val SAN_HE = listOf(
         Triple(DiZhi.SHEN, DiZhi.ZI, DiZhi.CHEN) to WuXing.SHUI,
         Triple(DiZhi.HAI, DiZhi.MAO, DiZhi.WEI) to WuXing.MU,
@@ -186,12 +187,22 @@ object BranchRelations {
         Triple(DiZhi.HAI, DiZhi.ZI, DiZhi.CHOU) to WuXing.SHUI
     )
 
-    /** 三刑组合（含自刑）。 */
-    private val XING = listOf(
-        listOf(DiZhi.YIN, DiZhi.SI, DiZhi.SHEN),
-        listOf(DiZhi.CHOU, DiZhi.XU, DiZhi.WEI),
-        listOf(DiZhi.ZI, DiZhi.MAO)
+    /**
+     * 三刑两组：寅巳申、丑戌未。
+     *
+     * 组内**任取两支**即构成相刑，不必三支俱全。旧实现把判定写成「数组长度等于 2」，
+     * 于是只有子卯这一组能命中，寅巳、巳申、寅申、丑戌、戌未、丑未六对全被跳过——
+     * 这就是「刑冲合害一栏不全」的根源。
+     */
+    private val SAN_XING = listOf(
+        Triple(DiZhi.YIN, DiZhi.SI, DiZhi.SHEN),
+        Triple(DiZhi.CHOU, DiZhi.XU, DiZhi.WEI)
     )
+
+    /** 子卯相刑，只有两支，无第三支可补。 */
+    private val ZI_MAO = setOf(DiZhi.ZI, DiZhi.MAO)
+
+    /** 自刑：辰午酉亥四支，重现即成。 */
     private val SELF_XING = setOf(DiZhi.CHEN, DiZhi.WU, DiZhi.YOU, DiZhi.HAI)
 
     fun between(a: DiZhi, b: DiZhi): List<RelationType> {
@@ -201,7 +212,8 @@ object BranchRelations {
         if (pair in LIU_HE) out += RelationType.LIU_HE
         if (pair in LIU_HAI) out += RelationType.LIU_HAI
         if ((a.index - b.index + 12) % 12 == 6) out += RelationType.LIU_CHONG
-        if (XING.any { it.contains(a) && it.contains(b) && it.size == 2 }) out += RelationType.XIANG_XING
+        if (pair == ZI_MAO) out += RelationType.XIANG_XING
+        if (SAN_XING.any { a in it.toList() && b in it.toList() }) out += RelationType.XIANG_XING
         return out
     }
 
@@ -210,54 +222,107 @@ object BranchRelations {
         val result = mutableListOf<BranchRelation>()
         val present = pillars.map { it.second }.toSet()
 
+        fun positionsOf(branches: List<DiZhi>): List<PillarPosition> =
+            pillars.filter { it.second in branches }.map { it.first }
+
+        // ---- 两两关系：六合、六冲、六害、子卯刑、三刑组内两两
         for (i in pillars.indices) {
             for (j in i + 1 until pillars.size) {
                 val (posA, a) = pillars[i]
                 val (posB, b) = pillars[j]
+                if (a == b) continue // 同支另按自刑处理，避免与自刑重复
                 for (type in between(a, b)) {
                     result += BranchRelation(
                         type = type,
                         branches = listOf(a, b),
                         positions = listOf(posA, posB),
-                        note = "${a.cn}${type.cn}${b.cn}"
+                        note = pairNote(a, b, type)
                     )
                 }
             }
         }
 
-        SAN_HE.forEach { (triple, element) ->
-            if (present.containsAll(triple.toList())) {
+        // ---- 三刑俱全：三支齐备时给一条整体记录，并吸收同组的两两记录
+        val fullXing = mutableListOf<List<DiZhi>>()
+        SAN_XING.forEach { triple ->
+            val hit = triple.toList().filter { it in present }
+            if (hit.size == 3) {
+                fullXing += hit
                 result += BranchRelation(
-                    type = RelationType.SAN_HE,
-                    branches = triple.toList(),
-                    element = element,
-                    note = "三合${element.cn}局"
+                    type = RelationType.XIANG_XING,
+                    branches = hit,
+                    positions = positionsOf(hit),
+                    note = hit.joinToString("") { it.cn } + "三刑俱全"
+                )
+            }
+        }
+        result.removeAll { rel ->
+            rel.type == RelationType.XIANG_XING && rel.branches.size == 2 &&
+                fullXing.any { it.containsAll(rel.branches) }
+        }
+
+        // ---- 自刑：同一支出现两次以上
+        val counts = pillars.groupingBy { it.second }.eachCount()
+        SELF_XING.forEach { zhi ->
+            val n = counts[zhi] ?: 0
+            if (n >= 2) {
+                result += BranchRelation(
+                    type = RelationType.XIANG_XING,
+                    branches = List(n) { zhi },
+                    positions = positionsOf(listOf(zhi)),
+                    note = zhi.cn + zhi.cn + "自刑"
                 )
             }
         }
 
+        // ---- 三合局；不成局时检半合（半合必含旺神）
+        SAN_HE.forEach { (triple, element) ->
+            val t = triple.toList()
+            if (present.containsAll(t)) {
+                result += BranchRelation(
+                    type = RelationType.SAN_HE,
+                    branches = t,
+                    positions = positionsOf(t),
+                    element = element,
+                    note = "三合" + element.cn + "局"
+                )
+            } else {
+                listOf(t[0] to t[1], t[1] to t[2]).forEach { (x, y) ->
+                    if (x in present && y in present) {
+                        result += BranchRelation(
+                            type = RelationType.BAN_HE,
+                            branches = listOf(x, y),
+                            positions = positionsOf(listOf(x, y)),
+                            element = element,
+                            note = x.cn + y.cn + "半合" + element.cn + "局"
+                        )
+                    }
+                }
+            }
+        }
+
+        // ---- 三会方
         SAN_HUI.forEach { (triple, element) ->
             if (present.containsAll(triple.toList())) {
                 result += BranchRelation(
                     type = RelationType.SAN_HUI,
                     branches = triple.toList(),
+                    positions = positionsOf(triple.toList()),
                     element = element,
-                    note = "三会${element.cn}方"
-                )
-            }
-        }
-
-        XING.forEach { group ->
-            val hit = group.filter { it in present }
-            if (hit.size >= 2) {
-                result += BranchRelation(
-                    type = RelationType.XIANG_XING,
-                    branches = hit,
-                    note = "三刑"
+                    note = "三会" + element.cn + "方"
                 )
             }
         }
 
         return result
+    }
+
+    /** 二元关系的措辞：把「相冲」挂在两支之后，读作「子午相冲」而不是「子相冲午」。 */
+    private fun pairNote(a: DiZhi, b: DiZhi, type: RelationType): String = when (type) {
+        RelationType.LIU_HE -> a.cn + b.cn + "六合"
+        RelationType.LIU_CHONG -> a.cn + b.cn + "相冲"
+        RelationType.LIU_HAI -> a.cn + b.cn + "相害"
+        RelationType.XIANG_XING -> a.cn + b.cn + "相刑"
+        else -> a.cn + b.cn + type.cn
     }
 }

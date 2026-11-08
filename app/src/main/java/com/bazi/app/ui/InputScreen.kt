@@ -45,12 +45,9 @@ import com.bazi.calendar.CalendarType
 import com.bazi.calendar.City
 import com.bazi.calendar.CityDatabase
 import com.bazi.calendar.Gender
+import com.bazi.calendar.LunarText
 import com.bazi.calendar.ZiHourSect
 
-private val LUNAR_MONTHS = arrayOf(
-    "正月", "二月", "三月", "四月", "五月", "六月",
-    "七月", "八月", "九月", "十月", "冬月", "腊月"
-)
 private val SOLAR_MONTHS = (1..12).map { "$it" }
 private val YEARS = (1900..2100).map { "$it" }
 private val HOURS = (0..23).map { "%02d".format(it) }
@@ -60,8 +57,8 @@ private val MINUTES = (0..59).map { "%02d".format(it) }
 private fun lunarMonthOptions(leap: Int): List<Pair<String, Pair<Int, Boolean>>> =
     buildList {
         for (m in 1..12) {
-            add(LUNAR_MONTHS[m - 1] to (m to false))
-            if (m == leap) add("闰${LUNAR_MONTHS[m - 1]}" to (m to true))
+            add(LunarText.monthName(m) to (m to false))
+            if (m == leap) add("闰" + LunarText.monthName(m) to (m to true))
         }
     }
 
@@ -162,13 +159,21 @@ private fun BirthPanel(state: UiState, viewModel: BaziViewModel) {
             .indexOfFirst { it.second.first == state.month && it.second.second == state.leapMonth }
             .coerceAtLeast(0)
     }
-    val dayLabels = remember(state.dayCount) { (1..state.dayCount).map { "$it" } }
+    // 农历的「日」用中文（初一…三十），公历保持阿拉伯数字：
+    // 两套历法各有自己的书写习惯，混用会显得外行。
+    val dayLabels = remember(state.dayCount, state.calendarType) {
+        if (state.calendarType == CalendarType.SOLAR) {
+            (1..state.dayCount).map { "$it" }
+        } else {
+            (1..state.dayCount).map { LunarText.dayName(it) }
+        }
+    }
 
-    val monthLabel = (if (state.leapMonth) "闰" else "") + LUNAR_MONTHS[state.month - 1]
+    val monthLabel = (if (state.leapMonth) "闰" else "") + LunarText.monthName(state.month)
     val summary = if (state.calendarType == CalendarType.SOLAR) {
         "公历 ${state.selectionText}"
     } else {
-        "农历 ${state.year} 年 $monthLabel ${state.day} 日 %02d:%02d".format(state.hour, state.minute)
+        "农历 ${state.year} 年 $monthLabel${LunarText.dayName(state.day)} %02d:%02d".format(state.hour, state.minute)
     }
 
     Panel {

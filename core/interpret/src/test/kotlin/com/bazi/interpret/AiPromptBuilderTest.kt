@@ -49,14 +49,15 @@ class AiPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("九节齐全")
+    @DisplayName("八节齐全，且不再含古籍章节")
     fun sectionsPresent() {
         val text = prompt()
         listOf(
             "## 一、出生", "## 二、四柱", "## 三、四柱神煞",
             "## 四、大运", "## 五、大运神煞", "## 六、流年",
-            "## 七、流年神煞", "## 八、流月", "## 九、古籍分歧"
+            "## 七、流年神煞", "## 八、流月"
         ).forEach { title -> assertTrue(text.contains(title), "缺少章节：$title") }
+        assertFalse(text.contains("古籍"), "盘面文本不应再含古籍章节")
     }
 
     @Test
@@ -90,17 +91,14 @@ class AiPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("十部古籍逐一列出，且给出分歧对照")
-    fun classics() {
+    @DisplayName("十部古籍已全部移出盘面文本")
+    fun noClassics() {
         val text = prompt()
         listOf(
             "滴天髓", "穷通宝鉴", "三命通会", "八字提要", "子平真诠",
-            "天元咸巫", "神峰通考", "千里命稿", "五行精纪", "李虚中命书"
-        ).forEach { book -> assertTrue(text.contains(book), "缺古籍：$book") }
-        assertTrue(text.contains("### 分歧对照"), "缺分歧对照小节")
-        assertTrue(text.contains("命主是谁"), "缺主星分歧轴")
-        assertTrue(text.contains("用神从哪里取"), "缺取用分歧轴")
-        assertTrue(text.contains("纳音用不用"), "缺纳音分歧轴")
+            "天元咸巫", "神峰通考", "千里命稿", "五行精纪", "李虚中命书",
+            "分歧对照"
+        ).forEach { item -> assertFalse(text.contains(item), "不应出现：$item") }
     }
 
     @Test
