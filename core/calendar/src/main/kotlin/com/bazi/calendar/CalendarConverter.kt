@@ -137,9 +137,6 @@ object CalendarConverter {
         )
     }
 
-日"
-    }
-
 }
 
 /** tyme SolarTime → java.time。 */
