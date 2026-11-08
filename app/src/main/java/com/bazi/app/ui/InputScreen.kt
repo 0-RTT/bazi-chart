@@ -2,11 +2,17 @@ package com.bazi.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -40,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bazi.app.BaziViewModel
+import com.bazi.app.data.GeoLocator
 import com.bazi.app.UiState
 import com.bazi.calendar.CalendarType
 import com.bazi.calendar.City
@@ -47,6 +54,7 @@ import com.bazi.calendar.CityDatabase
 import com.bazi.calendar.Gender
 import com.bazi.calendar.LunarText
 import com.bazi.calendar.ZiHourSect
+import kotlinx.coroutines.launch
 
 private val SOLAR_MONTHS = (1..12).map { "$it" }
 private val YEARS = (1900..2100).map { "$it" }
@@ -283,6 +291,33 @@ private fun BirthPanel(state: UiState, viewModel: BaziViewModel) {
 
 @Composable
 private fun PlacePanel(state: UiState, viewModel: BaziViewModel, onPickCity: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var locating by remember { mutableStateOf(false) }
+    var locateHint by remember { mutableStateOf<String?>(null) }
+
+    fun locate() {
+        locating = true
+        locateHint = null
+        scope.launch {
+            val location = GeoLocator.locate(context)
+            locating = false
+            if (location == null) {
+                // 三种可能：系统定位关着、室内没信号、机型太老（26–29 只能取最后已知位置）
+                locateHint = "没取到定位。可打开系统定位后重试，或直接手选城市"
+            } else {
+                viewModel.setCityByCoords(location.longitude, location.latitude)
+                locateHint = "已按定位取经度 %.2f°E".format(location.longitude)
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) locate() else locateHint = "未授予定位权限，可按城市手选"
+    }
+
     Panel {
         Row(
             modifier = Modifier
@@ -304,6 +339,33 @@ private fun PlacePanel(state: UiState, viewModel: BaziViewModel, onPickCity: () 
                 "%.2f°E".format(state.city.longitude),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(2.dp))
+            TextButton(
+                onClick = {
+                    if (locating) return@TextButton
+                    if (GeoLocator.hasPermission(context)) {
+                        locate()
+                    } else {
+                        permissionLauncher.launch(GeoLocator.PERMISSION)
+                    }
+                },
+                enabled = !locating
+            ) {
+                Text(
+                    if (locating) "定位中…" else "定位",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        locateHint?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp)
             )
         }
 
@@ -329,7 +391,8 @@ private fun PlacePanel(state: UiState, viewModel: BaziViewModel, onPickCity: () 
 @Composable
 private fun CityPickerDialog(onDismiss: () -> Unit, onPick: (City) -> Unit) {
     var keyword by remember { mutableStateOf("") }
-    val results = CityDatabase.search(keyword)
+    var province by remember { mutableStateOf<String?>(null) }
+    val results = CityDatabase.search(keyword, province)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -340,14 +403,29 @@ private fun CityPickerDialog(onDismiss: () -> Unit, onPick: (City) -> Unit) {
                 OutlinedTextField(
                     value = keyword,
                     onValueChange = { keyword = it },
-                    placeholder = { Text("输入城市名") },
+                    placeholder = { Text("输入城市名或省份") },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.heightIn(max = 340.dp)) {
+                // 381 个地级市平铺太长，先按省收一遍；点同一省再点一次取消
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item {
+                        ProvinceChip("全部", province == null) { province = null }
+                    }
+                    items(CityDatabase.provinces) { name ->
+                        ProvinceChip(name, province == name) {
+                            province = if (province == name) null else name
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                     items(results) { city ->
                         Row(
                             modifier = Modifier
@@ -365,11 +443,43 @@ private fun CityPickerDialog(onDismiss: () -> Unit, onPick: (City) -> Unit) {
                             )
                         }
                     }
+                    if (results.isEmpty()) {
+                        item {
+                            Text(
+                                "没找到。试试省份名，或只输一个字",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
         }
+    )
+}
+
+/** 省份筛选小片。与分段选择器同一套圆角与配色，只做单选。 */
+@Composable
+private fun ProvinceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        fontSize = 12.sp,
+        color = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     )
 }

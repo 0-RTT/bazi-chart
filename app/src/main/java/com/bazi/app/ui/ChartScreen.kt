@@ -439,13 +439,13 @@ private fun AiEntry(onClick: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                "盘面文本已生成",
+                "分析文本已生成",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
-                "四柱、藏干、纳音、空亡，以及大运、流年、流月",
+                "分析指令 + 四柱、大运、流年、流月，可整段粘给大模型",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )

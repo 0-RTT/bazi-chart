@@ -6,6 +6,13 @@
         命例数据不出设备。这也是产品定位的一部分，不是技术限制。
     -->
 
+    <!--
+        只要有粗定位：真太阳时只跟经度有关，城市级精度足够。
+        定位由系统服务完成，本应用只接收结果，不做逆地理编码（那要联网），
+        拿坐标去内置城市库里找最近的地级市当地名。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:allowBackup="true"
         android:label="八字排盘"

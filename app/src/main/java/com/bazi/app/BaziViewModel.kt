@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bazi.analysis.AnalysisResult
 import com.bazi.analysis.ChartAnalyzer
+import com.bazi.app.data.GeoLocator
 import com.bazi.app.data.HistoryEntry
 import com.bazi.app.data.HistoryStore
 import com.bazi.calendar.BirthInput
@@ -32,7 +33,7 @@ data class ChartBundle(
     val chart: BaziChart,
     /** 分析结果目前只用于命盘表的神煞行；旺衰、格局、调候不再上屏。 */
     val analysis: AnalysisResult,
-    /** 盘面文本，四节：排盘、大运、流年、流月。可直接整段复制给大模型。 */
+    /** 盘面文本：任务段 + 排盘、大运、流年、流月四节数据。可直接整段复制给大模型。 */
     val aiPrompt: String
 )
 
@@ -101,6 +102,14 @@ class BaziViewModel(app: Application) : AndroidViewModel(app) {
     fun setMinute(value: Int) = update { it.copy(minute = value) }
     fun setGender(value: Gender) = update { it.copy(gender = value) }
     fun setCity(value: City) = update { it.copy(city = value) }
+
+    /**
+     * 按定位得到的经纬度设出生地。
+     *
+     * 城市名取最近的地级市（给人看），经度用**实测值**（给真太阳时算）。
+     */
+    fun setCityByCoords(longitude: Double, latitude: Double) =
+        setCity(GeoLocator.toCity(longitude, latitude))
     fun setTrueSolarTime(value: Boolean) = update { it.copy(useTrueSolarTime = value) }
     fun setZiHour(value: ZiHourSect) = update { it.copy(ziHour = value) }
     fun clearError() = _state.update { it.copy(error = null) }
@@ -140,10 +149,14 @@ class BaziViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching {
                     val chart = BaziCalculator.calculate(input)
                     val analysis = ChartAnalyzer.analyze(chart)
+                    // 神煞在这里转成「宫位 → 名称」，让 core:interpret 不必依赖 core:analysis
+                    val shenSha = analysis.shenSha
+                        .flatMap { hit -> hit.positions.map { it to hit.name } }
+                        .groupBy({ it.first }, { it.second })
                     ChartBundle(
                         chart = chart,
                         analysis = analysis,
-                        aiPrompt = AiPromptBuilder.build(chart)
+                        aiPrompt = AiPromptBuilder.build(chart, shenSha = shenSha)
                     )
                 }
             }

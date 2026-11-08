@@ -14,6 +14,9 @@
 
 from __future__ import annotations
 
+import math
+import os
+import re
 import sys
 
 # ---------------------------------------------------------------- 干支
@@ -125,6 +128,102 @@ def check(label: str, actual, expected) -> None:
         FAILS.append(f"{label}: 期望 {expected}，实际 {actual}")
 
 
+# ---------------------------------------------------------------- 城市库
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CITY_KT = os.path.join(ROOT, "core", "calendar", "src", "main", "kotlin",
+                      "com", "bazi", "calendar", "CityDatabase.kt")
+
+
+def haversine(lon1, lat1, lon2, lat2):
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = p2 - p1
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def load_cities():
+    src = open(CITY_KT, encoding="utf-8").read()
+    return [(n, p, float(lon), float(lat))
+            for n, p, lon, lat in re.findall(
+                r'City\("([^"]+)", "([^"]+)", ([0-9.]+), ([0-9.]+)\)', src)]
+
+
+def check_cities() -> None:
+    """城市库：条目数、范围、重名、直辖市与就近匹配。
+
+    不是「看起来对」就行——就近匹配错了，定位就会把南方人判到北方，
+    经度差 10° 就是 40 分钟，足以跨两个时辰。
+    """
+    rows = load_cities()
+    check("城市条目数", len(rows), 381)
+    check("省级行政区数", len({p for _, p, _, _ in rows}), 34)
+
+    # 中国境内范围：经度 73–136，纬度 3–54
+    bad_lon = [n for n, _, lon, _ in rows if not 73 <= lon <= 136]
+    bad_lat = [n for n, _, _, lat in rows if not 3 <= lat <= 54]
+    check("经度越界", bad_lon, [])
+    check("纬度越界", bad_lat, [])
+
+    # 同省不得重名（重名会让搜索结果出现两条一模一样的行）
+    seen = {}
+    dup = []
+    for n, p, _, _ in rows:
+        key = (n, p)
+        if key in seen:
+            dup.append(key)
+        seen[key] = True
+    check("同省重名", dup, [])
+
+    # 每个省级行政区至少有一个可选点
+    empty = [p for p in {x[1] for x in rows}
+             if not any(r[1] == p for r in rows)]
+    check("空省份", empty, [])
+
+    # 直辖市必须以自身为名、且只有一个
+    for m in ["北京", "天津", "上海", "重庆", "香港", "澳门"]:
+        hits = [r for r in rows if r[0] == m]
+        check(f"{m}条目数", len(hits), 1)
+
+    # 抽样：坐标与常识一致（误差 0.3° 以内）
+    expect = {
+        "北京": (116.41, 39.90), "上海": (121.47, 31.23), "广州": (113.26, 23.13),
+        "乌鲁木齐": (87.62, 43.79), "拉萨": (91.11, 29.65), "哈尔滨": (126.53, 45.80),
+        "三亚": (109.51, 18.25), "台北": (121.52, 25.03),
+    }
+    for name, (lon, lat) in expect.items():
+        hit = next((r for r in rows if r[0] == name), None)
+        check(f"{name}存在", hit is not None, True)
+        if hit:
+            check(f"{name}经度", abs(hit[2] - lon) < 0.3, True)
+            check(f"{name}纬度", abs(hit[3] - lat) < 0.3, True)
+
+
+def check_nearest() -> None:
+    """就近匹配：给定坐标必须落到该落的地级市。"""
+    rows = load_cities()
+
+    def nearest(lon, lat):
+        return min(rows, key=lambda r: haversine(r[2], r[3], lon, lat))[0]
+
+    cases = [
+        ((116.40, 39.90), "北京"),
+        ((121.47, 31.23), "上海"),
+        ((113.26, 23.13), "广州"),
+        ((114.06, 22.55), "深圳"),
+        ((104.07, 30.57), "成都"),
+        ((87.62, 43.79), "乌鲁木齐"),
+        ((91.11, 29.65), "拉萨"),
+        ((126.53, 45.80), "哈尔滨"),
+        ((110.20, 20.04), "海口"),
+        ((121.52, 25.03), "台北"),
+    ]
+    for (lon, lat), want in cases:
+        check(f"就近({lon},{lat})", nearest(lon, lat), want)
+
+
 def main() -> int:
     # 1. 六十甲子结构与序号
     check("甲子序号", ganzhi_index("甲子"), 0)
@@ -198,6 +297,10 @@ def main() -> int:
     check("命例年干十神", ten_god(day_master, "丙"), "正财")
     check("命例月干十神", ten_god(day_master, "癸"), "比肩")
     check("命例时干十神", ten_god(day_master, "壬"), "劫财")
+
+    # 9. 城市库与就近匹配
+    check_cities()
+    check_nearest()
 
     # ---------------------------------------------------------------- 输出
     print(f"共执行 {CHECKS} 项断言")

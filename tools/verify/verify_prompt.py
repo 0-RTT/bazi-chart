@@ -3,7 +3,7 @@
 分两块：
 
 1. 流月——五虎遁全表、月建干支阴阳必配、某一年逐柱对撞；
-2. 盘面文本——四节齐全，且不得混进推论项（神煞、旺衰、格局、调候、刑冲合害）
+2. 盘面文本——任务段八节齐全，数据段四节齐全且不得混进推论项（旺衰、格局、调候、喜用）
    与任务指令、规避语。
 
 文本这一块是机器把关的意义所在：靠人眼守「别把神煞写进去」守不住，
@@ -117,23 +117,42 @@ def test_nayin():
 def test_prompt_sections():
     src = strip_comments(read("interpret", "src", "main", "kotlin", "com", "bazi", "interpret", "AiPrompt.kt"))
 
-    # 四节
-    for title in ["一、排盘", "二、大运", "三、流年", "四、流月"]:
-        check(title in src, f"AiPrompt.kt 缺章节：{title}")
+    # 任务段：八节齐全。这份文本的唯一用途是粘给大模型，要求必须写死在生成端。
+    for title in ["# 八字命盘分析", "## 一、先校盘", "## 二、分析方法", "## 三、分析维度",
+                  "## 四、关键事件", "## 五、结论要能核对", "## 六、建议要能执行",
+                  "## 七、不确定就说不确定", "## 八、输出格式"]:
+        check(title in src, f"AiPrompt.kt 缺任务章节：{title}")
 
-    # 推论项一律不得出现
-    for word in ["神煞", "旺衰", "格局", "调候", "刑冲合害", "古籍", "喜用", "用神"]:
-        check(word not in src, f"AiPrompt.kt 不应含推论项：{word}")
+    # 任务段必须点明的要素：七个维度、事件四项、五派交叉
+    for word in ["事业", "财运", "婚恋", "子女", "六亲", "健康", "学业",
+                 "时间范围", "吉凶属性", "影响程度", "决定性",
+                 "子平格局派", "旺衰扶抑派", "调候派", "盲派", "神煞：只作旁证"]:
+        check(word in src, f"AiPrompt.kt 任务段缺要素：{word}")
 
-    # 任务指令与规避语
-    for word in ["请完成以下分析", "输出要求", "请你分析", "请分析",
-                 "仅供参考", "不构成", "不作为", "不可作为", "风险提示",
-                 "仅供传统文化研究", "你是一位"]:
-        check(word not in src, f"AiPrompt.kt 出现不应有的措辞：{word}")
+    # 数据段四节
+    for title in ["## 排盘", "## 大运", "## 流年", "## 流月"]:
+        check(title in src, f"AiPrompt.kt 缺数据章节：{title}")
 
-    # 构建函数签名应收敛为 chart + 参考年，不再依赖分析结果
+    head, sep, data = src.partition("以下为盘面数据。")
+    check(sep != "" and data.strip() != "", "AiPrompt.kt 缺「以下为盘面数据」分隔")
+
+    # 数据段只陈述事实：旺衰、格局、调候、喜用、古籍一律不得出现
+    for word in ["旺衰", "格局", "调候", "古籍", "喜用", "用神"]:
+        check(word not in data, f"数据段不应含推论项：{word}")
+
+    # 神煞作为一行事实进数据段，但不是单独成节
+    check('"| 神煞 | "' in data, "数据段缺神煞行")
+    check('it != "空亡"' in data, "神煞行未排除重复的空亡")
+
+    # 规避语一律不得出现（模型怎么答是模型的事，本应用不替它划定边界）
+    for word in ["仅供参考", "不构成", "不作为", "不可作为", "风险提示",
+                 "仅供传统文化研究"]:
+        check(word not in src, f"AiPrompt.kt 出现规避语：{word}")
+
+    # 依赖边界：本层只收字符串，不依赖分析结果
     check("analysis: AnalysisResult" not in src, "AiPrompt 不应再依赖 AnalysisResult")
-    check("ShenShaAnalyzer" not in src, "AiPrompt 不应再引用神煞")
+    check("ShenShaAnalyzer" not in src, "AiPrompt 不应再引用神煞分析器")
+    check("shenSha: Map<PillarPosition, List<String>>" in src, "AiPrompt 应通过字符串入参接收神煞")
 
 
 def test_interpreter_removed():
@@ -204,7 +223,7 @@ def main():
 
     print(f"共执行 {CHECKS} 项断言")
     print("  五虎遁 10 组、月建 120 组、2026 丙午年 12 柱")
-    print("  纳音 30 条、盘面四节纯净度、断语已下线、三刑补全、农历日名")
+    print("  纳音 30 条、任务段八节、数据段四节纯净度、断语已下线、三刑补全、农历日名")
     if FAILS:
         print(f"\n失败 {len(FAILS)} 项：")
         for f in FAILS:
