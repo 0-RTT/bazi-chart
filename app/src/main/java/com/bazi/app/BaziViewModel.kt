@@ -19,7 +19,11 @@ import com.bazi.calendar.ZiHourSect
 import com.bazi.engine.BaziCalculator
 import com.bazi.engine.BaziChart
 import com.bazi.engine.DiZhi
+import com.bazi.engine.GrowthPhaseTable
+import com.bazi.engine.HiddenStemTable
+import com.bazi.engine.StemRelations
 import com.bazi.interpret.AiPromptBuilder
+import com.bazi.interpret.StructureFactors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -156,7 +160,11 @@ class BaziViewModel(app: Application) : AndroidViewModel(app) {
                     ChartBundle(
                         chart = chart,
                         analysis = analysis,
-                        aiPrompt = AiPromptBuilder.build(chart, shenSha = shenSha)
+                        aiPrompt = AiPromptBuilder.build(
+                            chart,
+                            shenSha = shenSha,
+                            factors = structureFactors(chart, analysis)
+                        )
                     )
                 }
             }
@@ -265,6 +273,77 @@ private fun UiState.normalized(): UiState = when (calendarType) {
             month = m,
             leapMonth = keepLeap,
             day = day.coerceIn(1, max)
+        )
+    }
+    /**
+     * 结构因子：把分析层里**可复核**的那部分取出来，转成 core:interpret 认识的形状。
+     *
+     * 为什么不给「身弱」「正官格」「用神为某字」——那些是结论。先给结论，
+     * 模型只会顺着抄，抄错了也发现不了；而它自己判错时，读者对着因子一算
+     * 就能指出错在哪一步。
+     *
+     * 所以这里只放能被重算的东西：得令／得地／得势、帮身占比、五行力量、
+     * 刑冲合害与天干五合清单、月令寒暖。
+     */
+    private fun structureFactors(chart: BaziChart, analysis: AnalysisResult): StructureFactors {
+        val monthZhi = chart.monthCommand
+        val hidden = HiddenStemTable.stems(monthZhi)
+        val mainStem = HiddenStemTable.mainStem(monthZhi)
+        val gans = chart.pillars.map { it.gan }
+        val names = arrayOf("年", "月", "日", "时")
+        // 透干要写清落在哪一柱：任务段第一步要求「格神从哪一柱透出」，
+        // 只给干名，模型还得回头去四柱表里数一遍。
+        val revealed = gans.mapIndexedNotNull { i, gan ->
+            if (gan in hidden) names[i] + "干" + gan.cn else null
+        }
+
+        val detail = buildString {
+            append("本气").append(mainStem.cn).append(mainStem.wuXing.cn)
+            append(
+                if (revealed.isEmpty()) "，月令藏干未透"
+                else "，月令藏干透于" + revealed.joinToString("、")
+            )
+            append("；藏").append(hidden.joinToString("") { it.cn })
+        }
+
+        // 帮身 = 比劫（同我）与印（生我）。只数天干，地支的根气在五行力量里体现。
+        val me = chart.dayMaster.wuXing
+        val supporter = me.generatedBy()
+        val supportStems = gans.count { it.wuXing == me || it.wuXing == supporter }
+
+        val ganRelations = StemRelations.between(gans).map { rel ->
+            val pos = names[rel.aIndex] + "干—" + names[rel.bIndex] + "干"
+            val hua = rel.element?.let { "，化" + it.cn } ?: ""
+            rel.a.cn + rel.b.cn + rel.type + "（" + pos + hua + "）"
+        }
+
+        val zhiRelations = chart.relations.map { rel ->
+            val branches = rel.branches.joinToString("") { it.cn }
+            when {
+                rel.note.isEmpty() -> branches + rel.type.cn
+                // 二元关系的 note 已含支名（「子午相冲」），直接用作整句。
+                rel.note.startsWith(branches) -> rel.note
+                // 三合、三会、三刑俱全、自刑的 note 不含支名，需要拼在前面。
+                else -> branches + rel.note
+            }
+        }
+
+        val shares = analysis.strength.elementScores
+            .sortedByDescending { it.percent }
+            .map { it.wuXing.cn to it.percent }
+
+        return StructureFactors(
+            monthCommand = monthZhi,
+            monthDetail = detail,
+            dayMasterPhase = GrowthPhaseTable.of(chart.dayMaster, monthZhi).cn,
+            commandSupported = analysis.strength.hasCommand,
+            groundSupported = analysis.strength.hasGround,
+            supportStems = supportStems,
+            supportRatio = analysis.strength.ratio,
+            elementShares = shares,
+            missing = analysis.missingElements.map { it.cn },
+            ganRelations = ganRelations,
+            zhiRelations = zhiRelations
         )
     }
 }

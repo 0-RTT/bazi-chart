@@ -117,28 +117,60 @@ def test_nayin():
 def test_prompt_sections():
     src = strip_comments(read("interpret", "src", "main", "kotlin", "com", "bazi", "interpret", "AiPrompt.kt"))
 
-    # 任务段：八节齐全。这份文本的唯一用途是粘给大模型，要求必须写死在生成端。
-    for title in ["# 八字命盘分析", "## 一、先校盘", "## 二、分析方法", "## 三、分析维度",
-                  "## 四、关键事件", "## 五、结论要能核对", "## 六、建议要能执行",
-                  "## 七、不确定就说不确定", "## 八、输出格式"]:
+    # 任务段：九节齐全。这份文本的唯一用途是粘给大模型，要求必须写死在生成端。
+    for title in ["# 八字命盘分析", "## 一、先校盘", "## 二、判读主链", "## 三、判读纪律",
+                  "## 四、分析维度", "## 五、关键事件", "## 六、建议要能执行",
+                  "## 七、流月只在落到月份时用", "## 八、不确定就说不确定",
+                  "## 九、输出分两段"]:
         check(title in src, f"AiPrompt.kt 缺任务章节：{title}")
 
-    # 任务段必须点明的要素：七个维度、事件四项、五派交叉
-    for word in ["事业", "财运", "婚恋", "子女", "六亲", "健康", "学业",
-                 "时间范围", "吉凶属性", "影响程度", "决定性",
-                 "子平格局派", "旺衰扶抑派", "调候派", "盲派", "神煞：只作旁证"]:
-        check(word in src, f"AiPrompt.kt 任务段缺要素：{word}")
+    # 六步主链。少了次序，模型就会把维度当清单逐条填写，
+    # 写出来的东西样样都提、样样不能核对——这是上一版最大的毛病。
+    for step in ["月令取格", "论成败救应", "取用神", "看刑冲合害", "落宫位", "岁运引动"]:
+        check(step in src, f"AiPrompt.kt 主链缺一步：{step}")
+    check("先看提纲为重" in src, "主链未引《渊海子平》次序")
+    check("八字用神，专求月令" in src, "主链未引《子平真诠》")
 
-    # 数据段四节
-    for title in ["## 排盘", "## 大运", "## 流年", "## 流月"]:
+    # 任务段必须点明的要素：八维度（含性格）、事件四项、判读纪律、分档输出
+    for word in ["性格", "事业", "财运", "婚恋", "子女", "六亲", "健康", "学业"]:
+        check(word in src, f"AiPrompt.kt 任务段缺维度：{word}")
+    for word in ["时间", "吉凶", "程度", "决定性"]:
+        check(word in src, f"AiPrompt.kt 任务段缺事件要素：{word}")
+    for word in ["置信度", "多路闭环", "技术有利不等于必然发生", "不用现实结果反推",
+                 "术语要落地", "神煞只作旁证", "不要复述盘面"]:
+        check(word in src, f"AiPrompt.kt 任务段缺纪律：{word}")
+    for word in ["第一段", "第二段", "要不要展开"]:
+        check(word in src, f"AiPrompt.kt 任务段缺分档输出：{word}")
+
+    # 数据段五节（结构因子是这一版新增的可核对面）
+    for title in ["## 排盘", "## 结构因子", "## 大运", "## 流年", "## 流月"]:
         check(title in src, f"AiPrompt.kt 缺数据章节：{title}")
+
+    # 因子表逐行。这些行是「可复核」的载体：模型判错时，读者拿它们一算就知道错在哪。
+    # 「天干帮身」与「帮身力量占比」必须分列：前者只数四天干，后者含地支藏干加权，
+    # 挤在一行会被读成「这 N 位贡献了 X%」。
+    for row in ["月令", "日主在月令", "得令", "得地", "天干帮身", "帮身力量占比",
+                "五行力量", "四柱未见", "天干关系", "地支关系", "月令气候"]:
+        check(("| " + row + " |") in src, f"结构因子缺行：{row}")
 
     head, sep, data = src.partition("以下为盘面数据。")
     check(sep != "" and data.strip() != "", "AiPrompt.kt 缺「以下为盘面数据」分隔")
 
-    # 数据段只陈述事实：旺衰、格局、调候、喜用、古籍一律不得出现
+    # 用户决定：不加免责声明。钉住它，免得往后「顺手补一句」又把篇幅撑长。
+    # 只查任务段的**输出字面量**：KDoc 里正写着「按用户决定不加免责声明」，
+    # 查源码会把注释本身当成违规。
+    task_text = "".join(re.findall(r'"([^"\n]*)"', head))
+    check(len(task_text) > 500, "任务段字面量提取异常，可能是切分点变了")
+    for word in ["免责", "仅供", "娱乐参考", "非专业决策", "责任自负", "不构成"]:
+        check(word not in task_text, f"按用户决定不加免责声明，任务段却出现：{word}")
+
+    # 数据段只陈述事实：旺衰、格局、调候、喜用、古籍一律不得出现。
+    # 只查**输出文本**（appendLine 的字面量），不查函数源码——
+    # appendFactors 的 KDoc 里正写着「不给格局、用神」，查源码会误判。
+    data_text = "".join(re.findall(r'"([^"\n]*)"', data))
+    check(len(data_text) > 500, "数据段字面量提取异常，可能是切分点变了")
     for word in ["旺衰", "格局", "调候", "古籍", "喜用", "用神"]:
-        check(word not in data, f"数据段不应含推论项：{word}")
+        check(word not in data_text, f"数据段不应含推论项：{word}")
 
     # 神煞作为一行事实进数据段，但不是单独成节
     check('"| 神煞 | "' in data, "数据段缺神煞行")
@@ -153,6 +185,49 @@ def test_prompt_sections():
     check("analysis: AnalysisResult" not in src, "AiPrompt 不应再依赖 AnalysisResult")
     check("ShenShaAnalyzer" not in src, "AiPrompt 不应再引用神煞分析器")
     check("shenSha: Map<PillarPosition, List<String>>" in src, "AiPrompt 应通过字符串入参接收神煞")
+
+
+def test_stem_relations():
+    """天干五合与相冲：引擎只判有没有合、合化何物，不判化与不化。"""
+    tables = read("bazi", "src", "main", "kotlin", "com", "bazi", "engine", "Tables.kt")
+    check("object StemRelations" in tables, "Tables.kt 缺天干关系表")
+    check("data class StemRelation" in tables, "Tables.kt 缺 StemRelation 数据类")
+
+    # 五合五组：合化五行各自唯一
+    for pair, element in [("JIA", "TU"), ("YI", "JIN"), ("BING", "SHUI"),
+                          ("DING", "MU"), ("WU", "HUO")]:
+        check(("TianGan.%s to (" % pair) in tables, f"五合缺 %s 一组" % pair)
+        check(("WuXing.%s)" % element) in tables, f"五合 %s 的合化五行缺失" % pair)
+
+    # 五合十干全部成对出现（正反各一次）
+    for gan in ["JIA", "YI", "BING", "DING", "WU", "JI", "GENG", "XIN", "REN", "GUI"]:
+        check(("TianGan.%s to (TianGan." % gan) in tables, f"五合缺天干 {gan}")
+
+    # 相冲四组，且戊己不入冲
+    section = tables[tables.index("object StemRelations"):]
+    check(section.count("to TianGan.") >= 8, "相冲对不足四组（正反共八条）")
+    check("TianGan.WU to TianGan." not in section.replace("TianGan.WU to (TianGan.", ""),
+          "戊不应入相冲")
+    check("TianGan.JI to TianGan." not in section.replace("TianGan.JI to (TianGan.", ""),
+          "己不应入相冲")
+    check("fun between(" in section, "缺全盘枚举 between()")
+
+
+def test_factors_wiring():
+    """结构因子必须由 app 层从分析层取出后传入，core:interpret 不依赖 core:analysis。"""
+    vm = open(os.path.join("app", "src", "main", "java", "com", "bazi", "app",
+                           "BaziViewModel.kt"), encoding="utf-8").read()
+    check("structureFactors(" in vm, "ViewModel 未组装结构因子")
+    check("StructureFactors(" in vm, "ViewModel 未构造 StructureFactors")
+    check("GrowthPhaseTable.of(" in vm, "因子缺日主在月令的十二长生")
+    check("HiddenStemTable.mainStem(" in vm, "因子缺月令本气")
+    check("StemRelations.between(" in vm, "因子缺天干五合／相冲")
+    check("elementScores" in vm, "因子缺五行力量")
+
+    prompt = read("interpret", "src", "main", "kotlin", "com", "bazi", "interpret", "AiPrompt.kt")
+    check("data class StructureFactors" in prompt, "AiPrompt.kt 缺 StructureFactors")
+    check("factors: StructureFactors? = null" in prompt, "build() 未接受因子")
+    check("import com.bazi.analysis" not in prompt, "core:interpret 不得依赖 core:analysis")
 
 
 def test_interpreter_removed():
@@ -217,13 +292,16 @@ def main():
     test_concrete_2026()
     test_nayin()
     test_prompt_sections()
+    test_stem_relations()
+    test_factors_wiring()
     test_interpreter_removed()
     test_relations_source()
     test_lunar_day_text()
 
     print(f"共执行 {CHECKS} 项断言")
     print("  五虎遁 10 组、月建 120 组、2026 丙午年 12 柱")
-    print("  纳音 30 条、任务段八节、数据段四节纯净度、断语已下线、三刑补全、农历日名")
+    print("  纳音 30 条、任务段九节与六步主链、数据段五节纯净度、天干五合相冲、"
+          "结构因子接线、断语已下线、三刑补全、农历日名")
     if FAILS:
         print(f"\n失败 {len(FAILS)} 项：")
         for f in FAILS:

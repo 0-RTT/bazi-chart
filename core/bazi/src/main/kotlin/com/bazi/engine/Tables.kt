@@ -326,3 +326,83 @@ object BranchRelations {
         else -> a.cn + b.cn + type.cn
     }
 }
+
+/**
+ * 一条天干关系。
+ *
+ * @param aIndex 参与的两干所在的柱（0=年、1=月、2=日、3=时），供排版成「年干—月干」
+ */
+data class StemRelation(
+    val type: String,
+    val a: TianGan,
+    val b: TianGan,
+    val aIndex: Int,
+    val bIndex: Int,
+    val element: WuXing? = null
+)
+
+/**
+ * 天干关系：五合与相冲。
+ *
+ * 与地支分开成表，是因为两者的判定完全不同。地支有六合、三合、半合、三会、六冲、
+ * 相刑、六害七类；天干只论五合与相冲，没有刑，也没有半合。
+ *
+ * - 五合：甲己合土、乙庚合金、丙辛合水、丁壬合木、戊癸合火
+ * - 相冲：甲庚、乙辛、丙壬、丁癸。戊己居中央，不与四隅相冲
+ *
+ * 只判「有没有合」与「合化何物」，**不判化与不化**。合化要看月令、要看有无妒合争合，
+ * 各家分寸不一，交给读盘的人按所采流派定。
+ */
+object StemRelations {
+
+    private val COMBINE: Map<TianGan, Pair<TianGan, WuXing>> = mapOf(
+        TianGan.JIA to (TianGan.JI to WuXing.TU),
+        TianGan.JI to (TianGan.JIA to WuXing.TU),
+        TianGan.YI to (TianGan.GENG to WuXing.JIN),
+        TianGan.GENG to (TianGan.YI to WuXing.JIN),
+        TianGan.BING to (TianGan.XIN to WuXing.SHUI),
+        TianGan.XIN to (TianGan.BING to WuXing.SHUI),
+        TianGan.DING to (TianGan.REN to WuXing.MU),
+        TianGan.REN to (TianGan.DING to WuXing.MU),
+        TianGan.WU to (TianGan.GUI to WuXing.HUO),
+        TianGan.GUI to (TianGan.WU to WuXing.HUO)
+    )
+
+    private val CLASH: Set<Pair<TianGan, TianGan>> = setOf(
+        TianGan.JIA to TianGan.GENG, TianGan.GENG to TianGan.JIA,
+        TianGan.YI to TianGan.XIN, TianGan.XIN to TianGan.YI,
+        TianGan.BING to TianGan.REN, TianGan.REN to TianGan.BING,
+        TianGan.DING to TianGan.GUI, TianGan.GUI to TianGan.DING
+    )
+
+    fun combines(a: TianGan, b: TianGan): Boolean = COMBINE[a]?.first == b
+
+    /** 两干五合的合化五行；不合成 null。 */
+    fun combineElement(a: TianGan, b: TianGan): WuXing? =
+        if (combines(a, b)) COMBINE.getValue(a).second else null
+
+    fun clashes(a: TianGan, b: TianGan): Boolean = (a to b) in CLASH
+
+    /**
+     * 全盘天干关系，按柱位两两组合。
+     *
+     * 四柱只有六对，直接枚举；不查表配对，避免「隔位合」这类口径差异
+     * 被悄悄写成规则——列出来由读者判断成不成化。
+     */
+    fun between(gans: List<TianGan>): List<StemRelation> {
+        val out = mutableListOf<StemRelation>()
+        for (i in gans.indices) {
+            for (j in i + 1 until gans.size) {
+                val a = gans[i]
+                val b = gans[j]
+                if (combines(a, b)) {
+                    out += StemRelation("五合", a, b, i, j, combineElement(a, b))
+                }
+                if (clashes(a, b)) {
+                    out += StemRelation("相冲", a, b, i, j)
+                }
+            }
+        }
+        return out
+    }
+}

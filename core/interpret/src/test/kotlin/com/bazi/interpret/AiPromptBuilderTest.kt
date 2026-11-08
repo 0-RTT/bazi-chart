@@ -50,33 +50,120 @@ class AiPromptBuilderTest {
     )
 
     @Test
-    @DisplayName("任务段八节齐全：校盘、方法、维度、事件、依据、建议、不确定、格式")
+    @DisplayName("任务段九节齐全：校盘、主链、纪律、维度、事件、建议、流月、不确定、分档")
     fun taskSections() {
         val text = prompt()
         listOf(
             "# 八字命盘分析",
             "## 一、先校盘",
-            "## 二、分析方法",
-            "## 三、分析维度",
-            "## 四、关键事件",
-            "## 五、结论要能核对",
+            "## 二、判读主链",
+            "## 三、判读纪律",
+            "## 四、分析维度",
+            "## 五、关键事件",
             "## 六、建议要能执行",
-            "## 七、不确定就说不确定",
-            "## 八、输出格式"
+            "## 七、流月只在落到月份时用",
+            "## 八、不确定就说不确定",
+            "## 九、输出分两段"
         ).forEach { title -> assertTrue(text.contains(title), "缺少任务章节：$title") }
     }
 
     @Test
-    @DisplayName("任务段点明七维度与事件四项，且要求多派交叉")
+    @DisplayName("任务段给出六步主链：月令取格到岁运引动，一步不少")
+    fun pipeline() {
+        val text = prompt()
+        listOf("月令取格", "论成败救应", "取用神", "看刑冲合害", "落宫位", "岁运引动").forEach {
+            assertTrue(text.contains(it), "主链缺少一步：$it")
+        }
+        // 主链要引用古籍次序，不是凭空排的
+        assertTrue(text.contains("先看提纲为重"), "主链未引《渊海子平》次序")
+        assertTrue(text.contains("八字用神，专求月令"), "主链未引《子平真诠》")
+    }
+
+    @Test
+    @DisplayName("任务段点明八维度、事件四项、判读纪律与分档输出")
     fun taskRequirements() {
         val text = prompt()
-        listOf("事业", "财运", "婚恋", "子女", "六亲", "健康", "学业").forEach { dim ->
+        listOf("性格", "事业", "财运", "婚恋", "子女", "六亲", "健康", "学业").forEach { dim ->
             assertTrue(text.contains(dim), "任务段缺少维度：$dim")
         }
-        listOf("时间范围", "吉凶属性", "影响程度", "决定性", "子平格局派", "旺衰扶抑派", "调候派", "盲派").forEach {
-            assertTrue(text.contains(it), "任务段缺少要素：$it")
+        listOf("时间", "吉凶", "程度", "影响", "决定性").forEach {
+            assertTrue(text.contains(it), "任务段缺少事件要素：$it")
+        }
+        // 这几条是被真实输出逼出来的纪律，缺一条模型就会往该方向跑偏
+        listOf("置信度", "多路闭环", "技术有利不等于必然发生", "不用现实结果反推",
+               "术语要落地", "神煞只作旁证", "不要复述盘面").forEach {
+            assertTrue(text.contains(it), "任务段缺纪律：$it")
+        }
+        // 分档：先给一段，末尾问要不要展开
+        assertTrue(text.contains("第一段"), "任务段缺分档输出的第一段要求")
+        assertTrue(text.contains("要不要展开"), "任务段未要求末尾征询是否展开")
+    }
+
+    @Test
+    @DisplayName("结构因子表：只给可复核的事实，不给强弱、格局、用神")
+    fun factors() {
+        val text = AiPromptBuilder.build(
+            chart(), 2026, shenSha = shenSha(), factors = sampleFactors()
+        )
+        assertTrue(text.contains("## 结构因子"), "缺少结构因子一节")
+        listOf("月令", "日主在月令", "得令", "得地", "天干帮身", "帮身力量占比",
+               "五行力量", "四柱未见", "天干关系", "地支关系", "月令气候").forEach { row ->
+            assertTrue(text.contains("| " + row + " |"), "结构因子缺行：$row")
+        }
+        // 因子是事实，不能顺手把结论也写了
+        val factorBlock = text.substringAfter("## 结构因子").substringBefore("## 大运")
+        listOf("身弱", "身强", "正官格", "用神为", "喜用").forEach { word ->
+            assertFalse(factorBlock.contains(word), "结构因子混入了结论：$word")
+        }
+        // 五行力量要按占比从高到低排，且带百分号
+        assertTrue(text.contains("% ｜"), "五行力量未按占比并列")
+    }
+
+    @Test
+    @DisplayName("不给结构因子时该节整段消失，不留空壳")
+    fun factorsOptional() {
+        val text = prompt()
+        assertFalse(text.contains("## 结构因子"), "未传因子时不应出现该节")
+    }
+
+    @Test
+    @DisplayName("按用户决定：不加免责声明")
+    fun noDisclaimer() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        listOf("免责", "仅供", "娱乐参考", "非专业决策", "责任自负", "不构成").forEach {
+            assertFalse(task.contains(it), "任务段不应出现免责措辞：$it")
         }
     }
+
+    @Test
+    @DisplayName("维度与建议都归入第二段，不与第一段的篇幅要求打架")
+    fun stagedOutput() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        assertTrue(
+            task.contains("八项必答与选答都属于第九节的**第二段**"),
+            "未说明必答维度归第二段"
+        )
+        assertTrue(
+            task.contains("这一节属于第二段，第一段只给结论与时间轴"),
+            "未说明建议归第二段"
+        )
+        assertTrue(task.contains("不要在没被要求时把十项一次铺开"), "缺第一段的篇幅约束")
+    }
+
+    /** 因子由 app 层从分析层取出后传入。 */
+    private fun sampleFactors() = StructureFactors(
+        monthCommand = com.bazi.engine.DiZhi.SI,
+        monthDetail = "本气丙火，透干丙；藏丙戊庚",
+        dayMasterPhase = "临官",
+        commandSupported = true,
+        groundSupported = false,
+        supportStems = 2,
+        supportRatio = 0.62,
+        elementShares = listOf("火" to 0.42, "木" to 0.21, "土" to 0.18, "水" to 0.12, "金" to 0.07),
+        missing = listOf("金"),
+        ganRelations = listOf("甲己五合（年干—月干，化土）"),
+        zhiRelations = listOf("子午相冲")
+    )
 
     @Test
     @DisplayName("盘面数据四节齐全：排盘、大运、流年、流月")
