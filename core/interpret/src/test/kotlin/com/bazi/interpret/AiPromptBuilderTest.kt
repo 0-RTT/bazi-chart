@@ -39,10 +39,13 @@ class AiPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("文本可正常生成且不短于 4000 字")
+    @DisplayName("文本可正常生成，八节表格齐全")
     fun generates() {
         val text = prompt()
-        assertTrue(text.length > 4000, "实际长度 ${text.length}")
+        // 古籍移出后篇幅下降，改用结构性判据：八节 + 三张主表，比单纯字数可靠
+        assertTrue(text.length > 2000, "实际长度 ${text.length}")
+        assertTrue(text.lines().count { it.startsWith("| ") } >= 45,
+            "表格行数偏少：${text.lines().count { it.startsWith("| ") }}")
         assertFalse(text.contains("\${"), "存在未替换的模板占位符")
         assertFalse(text.contains("null"), "存在 null 值")
         assertFalse(text.contains("NaN"), "存在 NaN")
