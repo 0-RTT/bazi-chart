@@ -30,6 +30,12 @@ jobs:
       - name: 真太阳时校验
         run: python tools/verify/verify_truesolar.py
 
+      - name: 滚轮取值公式校验
+        run: python tools/verify/verify_wheel.py
+
+      - name: 历史存储格式校验
+        run: python tools/verify/verify_history.py
+
   build:
     name: 构建 Debug APK
     runs-on: ubuntu-latest

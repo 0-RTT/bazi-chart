@@ -10,7 +10,7 @@
 
 ## 一、验证边界
 
-- **已验证** — 核心算法用可执行方式验证过：用 Python 按同一套表和同一套公式独立实现，跑通 **119 项断言**，对撞 6tail/lunar 官方示例输出、2024 年 24 节气权威时刻、子平法通行表。
+- **已验证** — 核心算法用可执行方式验证过：用 Python 按同一套表和同一套公式独立实现，跑通 **184 项断言**，对撞 6tail/lunar 官方示例输出、2024 年 24 节气权威时刻、子平法通行表。
 - **已验证** — tyme4kt 的 API 不是猜的：逐一读取了其 master 分支源码（`SolarTime.kt` / `EightChar.kt` / `ChildLimit.kt` / `DecadeFortune.kt` / `SixtyCycle.kt` / `LunarHour.kt` / `LunarYear.kt` / `LunarMonth.kt`），按真实签名调用。
 - **已验证** — 编译：GitHub Actions 上 `assembleDebug` 通过，产出可安装 APK（见第七节）。
 - **待真机确认** — 滚轮手感（吸附速度、惯性）、衬线字体在各厂商 ROM 上的实际观感、深色模式对比度。这些只能在真机上看。
@@ -130,6 +130,17 @@ $ python tools/verify/verify_truesolar.py
   北京 116.41°E 12:00 → 真太阳时 11:32（经度-14.36分 均时差-13.61分）
   乌鲁木齐 87.62°E 12:00 → 真太阳时 09:37（经度-129.52分 均时差-13.61分）
 全部通过
+
+$ python tools/verify/verify_wheel.py
+共执行 49 项断言
+  旧实现：居中 1985 → 读出 1983（偏差 -2，且每次滚动都偏）
+  新实现：position 为整数时第 position 行恰好居中，选中项与视觉中心一致
+全部通过
+
+$ python tools/verify/verify_history.py
+共执行 16 项断言
+  字段数 17、坏行跳过、同生辰去重、上限 30 条 —— 均符合 Kotlin 侧规则
+全部通过
 ```
 
 覆盖内容：
@@ -243,7 +254,7 @@ gradle wrapper --gradle-version 8.7
 
 `.github/workflows/android.yml` 已配好，推到 GitHub 后自动执行：
 
-1. `verify-engine` —— 跑三个 Python 校验脚本（119 项断言）。算法不对，后面直接不构建。
+1. `verify-engine` —— 跑五个 Python 校验脚本（184 项断言）。算法不对，后面直接不构建。
 2. `build` —— 装 JDK 17 + SDK 34，跑 `:core:calendar:test` / `:core:bazi:test` / `:core:interpret:test`，再构建 Debug APK。
 3. 产物 `bazi-debug-apk` 挂在 Actions 页面该次运行的 Artifacts 中，下载即可安装。
 
