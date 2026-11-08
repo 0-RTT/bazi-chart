@@ -17,9 +17,18 @@ data class Pillar(
     /** 日柱天干为日主本身，故为 null。 */
     val ganTenGod: TenGod?,
     val hiddenStems: List<HiddenStemTenGod>,
-    /** 日主在此支的十二长生状态。 */
+    /** 日主在此支的十二长生状态，即「星运」。 */
     val growthPhase: GrowthPhase,
-    /** 此支是否落空亡。 */
+    /**
+     * 本柱天干坐本柱地支的十二长生，即「自坐」。
+     *
+     * 与 [growthPhase] 不是一回事：星运看的是日主落在各支，自坐看的是本柱干支自身。
+     * 日柱两者必然相同（本就是日主坐日支），其余三柱通常不同。
+     */
+    val ownGrowthPhase: GrowthPhase,
+    /** 本柱自身干支所属之旬的空亡，如己卯空申酉。每柱各不相同，与 [isEmptyBranch] 不是一回事。 */
+    val voidBranches: List<DiZhi>,
+    /** 此支是否落日柱旬空。 */
     val isEmptyBranch: Boolean
 ) {
     /** 本气十神，格局与运程判定中最常用的一个。 */

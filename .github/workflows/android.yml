@@ -39,6 +39,9 @@ jobs:
       - name: 古籍层与文本纯净度校验
         run: python tools/verify/verify_classics.py
 
+      - name: 四柱表版式与自坐旬空校验
+        run: python tools/verify/verify_plate.py
+
   build:
     name: 构建 Debug APK
     runs-on: ubuntu-latest

@@ -101,7 +101,11 @@ object AiPromptBuilder {
         appendLine("| 藏干十神 | " + p.joinToString(" | ") { hiddenGods(it) } + " |")
         appendLine("| 纳音 | " + p.joinToString(" | ") { it.naYin } + " |")
         appendLine("| 星运 | " + p.joinToString(" | ") { it.growthPhase.cn } + " |")
-        appendLine("| 空亡 | " + p.joinToString(" | ") { if (it.isEmptyBranch) "空" else "—" } + " |")
+        appendLine("| 自坐 | " + p.joinToString(" | ") { it.ownGrowthPhase.cn } + " |")
+        // 每柱各按自身干支所属之旬取空亡，四柱通常各不相同；
+        // 另用「落空」标出哪几柱的地支正落日柱旬空，两者语义不同，不可合并。
+        appendLine("| 空亡 | " + p.joinToString(" | ") { pillar -> pillar.voidBranches.joinToString("") { it.cn } } + " |")
+        appendLine("| 落空 | " + p.joinToString(" | ") { if (it.isEmptyBranch) "空" else "—" } + " |")
         appendLine()
         appendLine("旬空（依日柱）：${chart.voidBranches.joinToString("、") { it.cn }}")
         appendLine()

@@ -41,17 +41,20 @@ object BaziCalculator {
         val pillars = positionToCycle.map { (position, cycle) ->
             val gan = TianGan.of(cycle.getHeavenStem().getName())
             val zhi = DiZhi.of(cycle.getEarthBranch().getName())
+            val cycleIndex = indexOf(cycle)
             Pillar(
                 position = position,
                 gan = gan,
                 zhi = zhi,
                 ganZhi = gan.cn + zhi.cn,
-                naYin = NaYin.of(indexOf(cycle)),
+                naYin = NaYin.of(cycleIndex),
                 ganTenGod = if (position == PillarPosition.DAY) null else TenGod.between(dayMaster, gan),
                 hiddenStems = HiddenStemTable.of(zhi).map {
                     HiddenStemTenGod(it, TenGod.between(dayMaster, it.gan))
                 },
                 growthPhase = GrowthPhaseTable.of(dayMaster, zhi),
+                ownGrowthPhase = GrowthPhaseTable.of(gan, zhi),
+                voidBranches = voidBranches(cycleIndex),
                 isEmptyBranch = zhi in voidBranches
             )
         }
