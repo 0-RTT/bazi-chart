@@ -223,6 +223,12 @@ def test_factors_wiring():
     check("HiddenStemTable.mainStem(" in vm, "因子缺月令本气")
     check("StemRelations.between(" in vm, "因子缺天干五合／相冲")
     check("elementScores" in vm, "因子缺五行力量")
+    # CI 曾因这个函数被塞进 normalized() 的 when 表达式里而编译失败：
+    # 62 个错误全是同一根因。这里钉住「顶层声明」与「when 已闭合」两件事。
+    check("\nprivate fun structureFactors(" in vm,
+          "structureFactors 不是顶层函数（可能又落进了 when 表达式）")
+    check("    }\n}\n\n/**\n * 结构因子" in vm,
+          "normalized() 的 when 未闭合，结构因子函数会落进表达式体")
 
     prompt = read("interpret", "src", "main", "kotlin", "com", "bazi", "interpret", "AiPrompt.kt")
     check("data class StructureFactors" in prompt, "AiPrompt.kt 缺 StructureFactors")
