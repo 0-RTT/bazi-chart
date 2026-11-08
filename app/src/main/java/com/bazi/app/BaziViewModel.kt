@@ -9,10 +9,13 @@ import com.bazi.calendar.CalendarType
 import com.bazi.calendar.City
 import com.bazi.calendar.CityDatabase
 import com.bazi.calendar.Gender
+import com.bazi.calendar.MonthLength
 import com.bazi.calendar.SectConfig
 import com.bazi.calendar.ZiHourSect
 import com.bazi.engine.BaziCalculator
 import com.bazi.engine.BaziChart
+import com.bazi.engine.DiZhi
+import com.bazi.interpret.AiPromptBuilder
 import com.bazi.interpret.Interpretation
 import com.bazi.interpret.Interpreter
 import kotlinx.coroutines.Dispatchers
@@ -27,16 +30,24 @@ import kotlinx.coroutines.withContext
 data class ChartBundle(
     val chart: BaziChart,
     val analysis: AnalysisResult,
-    val interpretation: Interpretation
+    val interpretation: Interpretation,
+    /** 排盘后自动生成的 AI 分析指令，可直接整段复制给大模型。 */
+    val aiPrompt: String
 )
 
+/**
+ * 录入状态。
+ *
+ * 日期时间全部用 Int（滚轮天然是索引），校验与夹取集中在 [normalized]，
+ * 避免「2 月 31 日」这类输入流到引擎里才炸。
+ */
 data class UiState(
     val calendarType: CalendarType = CalendarType.SOLAR,
-    val year: String = "1990",
-    val month: String = "1",
-    val day: String = "1",
-    val hour: String = "12",
-    val minute: String = "0",
+    val year: Int = 1990,
+    val month: Int = 6,
+    val day: Int = 15,
+    val hour: Int = 12,
+    val minute: Int = 0,
     val leapMonth: Boolean = false,
     val gender: Gender = Gender.MALE,
     val city: City = CityDatabase.default,
@@ -45,55 +56,54 @@ data class UiState(
     val result: ChartBundle? = null,
     val loading: Boolean = false,
     val error: String? = null
-)
+) {
+    /** 当前月天数，滚轮「日」列据此生成。 */
+    val dayCount: Int get() = MonthLength.dayCount(calendarType, year, month, leapMonth)
+
+    /** 输入时刻所属时辰，仅用于提示，不参与排盘。 */
+    val shiChen: DiZhi get() = DiZhi.fromHourIndex((hour + 1) / 2)
+
+    /** 农历该年的闰月；0 表示无闰月。 */
+    val lunarLeap: Int
+        get() = if (calendarType == CalendarType.LUNAR) MonthLength.lunarLeapMonth(year) else 0
+}
 
 class BaziViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    fun setCalendarType(value: CalendarType) = _state.update { it.copy(calendarType = value, leapMonth = false) }
-    fun setYear(value: String) = _state.update { it.copy(year = value.filter { c -> c.isDigit() }.take(4)) }
-    fun setMonth(value: String) = _state.update { it.copy(month = value.filter { c -> c.isDigit() }.take(2)) }
-    fun setDay(value: String) = _state.update { it.copy(day = value.filter { c -> c.isDigit() }.take(2)) }
-    fun setHour(value: String) = _state.update { it.copy(hour = value.filter { c -> c.isDigit() }.take(2)) }
-    fun setMinute(value: String) = _state.update { it.copy(minute = value.filter { c -> c.isDigit() }.take(2)) }
-    fun setLeapMonth(value: Boolean) = _state.update { it.copy(leapMonth = value) }
-    fun setGender(value: Gender) = _state.update { it.copy(gender = value) }
-    fun setCity(value: City) = _state.update { it.copy(city = value) }
-    fun setTrueSolarTime(value: Boolean) = _state.update { it.copy(useTrueSolarTime = value) }
-    fun setZiHour(value: ZiHourSect) = _state.update { it.copy(ziHour = value) }
+    fun setCalendarType(value: CalendarType) = update { it.copy(calendarType = value) }
+    fun setYear(value: Int) = update { it.copy(year = value) }
+    fun setMonth(value: Int) = update { it.copy(month = value, leapMonth = false) }
+    fun setLunarMonth(value: Int, leap: Boolean) = update { it.copy(month = value, leapMonth = leap) }
+    fun setDay(value: Int) = update { it.copy(day = value) }
+    fun setHour(value: Int) = update { it.copy(hour = value) }
+    fun setMinute(value: Int) = update { it.copy(minute = value) }
+    fun setGender(value: Gender) = update { it.copy(gender = value) }
+    fun setCity(value: City) = update { it.copy(city = value) }
+    fun setTrueSolarTime(value: Boolean) = update { it.copy(useTrueSolarTime = value) }
+    fun setZiHour(value: ZiHourSect) = update { it.copy(ziHour = value) }
     fun clearError() = _state.update { it.copy(error = null) }
+
+    private fun update(block: (UiState) -> UiState) =
+        _state.update { block(it).normalized() }
 
     fun calculate() {
         val s = _state.value
-        val year = s.year.trim().toIntOrNull()
-        val month = s.month.trim().toIntOrNull()
-        val day = s.day.trim().toIntOrNull()
-        val hour = s.hour.trim().toIntOrNull() ?: 0
-        val minute = s.minute.trim().toIntOrNull() ?: 0
-
-        if (year == null || month == null || day == null) {
-            _state.update { it.copy(error = "出生时间未填写完整") }
-            return
-        }
-        if (month !in 1..12 || day !in 1..31 || hour !in 0..23 || minute !in 0..59) {
-            _state.update { it.copy(error = "时间取值超出范围") }
-            return
-        }
-        if (year < 1900 || year > 2100) {
+        if (s.year !in 1900..2100) {
             _state.update { it.copy(error = "当前版本支持 1900–2100 年") }
             return
         }
 
-        val monthValue = if (s.calendarType == CalendarType.LUNAR && s.leapMonth) -month else month
+        val signedMonth = if (s.calendarType == CalendarType.LUNAR && s.leapMonth) -s.month else s.month
         val input = BirthInput(
             calendarType = s.calendarType,
-            year = year,
-            month = monthValue,
-            day = day,
-            hour = hour,
-            minute = minute,
+            year = s.year,
+            month = signedMonth,
+            day = s.day,
+            hour = s.hour,
+            minute = s.minute,
             gender = s.gender,
             city = s.city,
             sect = SectConfig(
@@ -108,7 +118,12 @@ class BaziViewModel : ViewModel() {
                 runCatching {
                     val chart = BaziCalculator.calculate(input)
                     val analysis = ChartAnalyzer.analyze(chart)
-                    ChartBundle(chart, analysis, Interpreter.interpret(chart, analysis))
+                    ChartBundle(
+                        chart = chart,
+                        analysis = analysis,
+                        interpretation = Interpreter.interpret(chart, analysis),
+                        aiPrompt = AiPromptBuilder.build(chart, analysis)
+                    )
                 }
             }
             outcome.fold(
@@ -119,11 +134,33 @@ class BaziViewModel : ViewModel() {
                     _state.update {
                         it.copy(
                             loading = false,
-                            error = error.message ?: "排盘失败，请检查输入的日期是否存在"
+                            error = "该日期无法排盘：" +
+                                (error.message ?: "请检查月、日与闰月设置是否正确")
                         )
                     }
                 }
             )
         }
+    }
+}
+
+/**
+ * 夹取到合法日期。
+ *
+ * 换年（闰月变了）、换月（天数变了）、切历法，三种情况都要重算，
+ * 否则滚轮上会残留一个超出范围的日子。
+ */
+private fun UiState.normalized(): UiState = when (calendarType) {
+    CalendarType.SOLAR -> {
+        val max = MonthLength.solarDayCount(year, month)
+        copy(month = month.coerceIn(1, 12), day = day.coerceIn(1, max))
+    }
+
+    CalendarType.LUNAR -> {
+        val leap = MonthLength.lunarLeapMonth(year)
+        val m = month.coerceIn(1, 12)
+        val keepLeap = leapMonth && leap == m
+        val max = MonthLength.lunarDayCount(year, if (keepLeap) -m else m)
+        copy(month = m, leapMonth = keepLeap, day = day.coerceIn(1, max))
     }
 }

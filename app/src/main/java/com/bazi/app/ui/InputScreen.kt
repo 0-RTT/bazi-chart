@@ -1,6 +1,5 @@
 package com.bazi.app.ui
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,23 +11,21 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,8 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bazi.app.BaziViewModel
 import com.bazi.app.UiState
 import com.bazi.calendar.CalendarType
@@ -46,7 +46,24 @@ import com.bazi.calendar.City
 import com.bazi.calendar.CityDatabase
 import com.bazi.calendar.Gender
 import com.bazi.calendar.ZiHourSect
-import com.bazi.engine.DiZhi
+
+private val LUNAR_MONTHS = arrayOf(
+    "正月", "二月", "三月", "四月", "五月", "六月",
+    "七月", "八月", "九月", "十月", "冬月", "腊月"
+)
+private val SOLAR_MONTHS = (1..12).map { "$it" }
+private val YEARS = (1900..2100).map { "$it" }
+private val HOURS = (0..23).map { "%02d".format(it) }
+private val MINUTES = (0..59).map { "%02d".format(it) }
+
+/** 农历月选项：月号 + 是否闰月，闰月紧跟在本月之后。 */
+private fun lunarMonthOptions(leap: Int): List<Pair<String, Pair<Int, Boolean>>> =
+    buildList {
+        for (m in 1..12) {
+            add(LUNAR_MONTHS[m - 1] to (m to false))
+            if (m == leap) add("闰${LUNAR_MONTHS[m - 1]}" to (m to true))
+        }
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,165 +71,75 @@ fun InputScreen(state: UiState, viewModel: BaziViewModel) {
     var showCityPicker by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("八字排盘") }) }
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "八字排盘",
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 2.sp
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "子平法",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 28.dp)
         ) {
-            SectionLabel("历法")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = state.calendarType == CalendarType.SOLAR,
-                    onClick = { viewModel.setCalendarType(CalendarType.SOLAR) },
-                    label = { Text("公历") }
-                )
-                FilterChip(
-                    selected = state.calendarType == CalendarType.LUNAR,
-                    onClick = { viewModel.setCalendarType(CalendarType.LUNAR) },
-                    label = { Text("农历") }
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("出生日期")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumberField(state.year, viewModel::setYear, "年", Modifier.weight(1.2f))
-                NumberField(state.month, viewModel::setMonth, "月", Modifier.weight(1f))
-                NumberField(state.day, viewModel::setDay, "日", Modifier.weight(1f))
-            }
-
-            if (state.calendarType == CalendarType.LUNAR) {
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = state.leapMonth, onCheckedChange = viewModel::setLeapMonth)
-                    Spacer(Modifier.width(10.dp))
-                    Text("该月为闰月", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("出生时间")
-            OutlinedTextField(
-                value = state.hour,
-                onValueChange = viewModel::setHour,
-                label = { Text("时") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            OutlinedTextField(
-                value = state.minute,
-                onValueChange = viewModel::setMinute,
-                label = { Text("分") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.weight(2f))
-            Spacer(Modifier.height(8.dp))
-            val hourValue = state.hour.toIntOrNull() ?: 0
-            val currentZhi = DiZhi.fromHourIndex((hourValue + 1) / 2)
-            Text(
-                "当前时辰：${currentZhi.cn}时（${currentZhi.hourRange}）",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(DiZhi.entries.toList()) { zhi ->
-                    FilterChip(
-                        selected = currentZhi == zhi,
-                        onClick = { viewModel.setHour((zhi.index * 2).toString()) },
-                        label = { Text(zhi.cn) }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("性别")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = state.gender == Gender.MALE,
-                    onClick = { viewModel.setGender(Gender.MALE) },
-                    label = { Text("男") }
-                )
-                FilterChip(
-                    selected = state.gender == Gender.FEMALE,
-                    onClick = { viewModel.setGender(Gender.FEMALE) },
-                    label = { Text("女") }
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("出生地")
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
-                    .clickable { showCityPicker = true }
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
-            ) {
-                Text(
-                    "城市",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(state.city.displayName, style = MaterialTheme.typography.bodyLarge)
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(Modifier.clickable { showCityPicker = true }) {
-                Text(
-                    "经度 ${"%.2f".format(state.city.longitude)}°E　点击更换",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("流派与校正")
-            ToggleRow(
-                title = "真太阳时校正",
-                subtitle = "按出生地经度与均时差换算，时柱以此为准",
-                checked = state.useTrueSolarTime,
-                onChange = viewModel::setTrueSolarTime
-            )
-            ToggleRow(
-                title = "23 时后算次日",
-                subtitle = "关闭则 23:00–23:59 仍归当日（早子时派）",
-                checked = state.ziHour == ZiHourSect.LATE,
-                onChange = { viewModel.setZiHour(if (it) ZiHourSect.LATE else ZiHourSect.EARLY) }
-            )
+            BirthPanel(state, viewModel)
+            Spacer(Modifier.height(12.dp))
+            PlacePanel(state, viewModel) { showCityPicker = true }
 
             state.error?.let { message ->
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                     message,
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(18.dp))
             Button(
                 onClick = viewModel::calculate,
                 enabled = !state.loading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Text(if (state.loading) "排盘中…" else "开始排盘")
+                Text(
+                    if (state.loading) "排盘中…" else "开始排盘",
+                    fontSize = 15.sp,
+                    letterSpacing = 4.sp
+                )
             }
-            Spacer(Modifier.height(12.dp))
+
+            Spacer(Modifier.height(10.dp))
             Text(
-                "全程离线计算，命例数据不出设备。结果仅供传统文化研究与自我参照。",
-                style = MaterialTheme.typography.bodySmall,
+                "全程离线计算，命例数据不出设备。结果依子平法通行口径，仅供传统文化研究与自我参照。",
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(32.dp))
         }
     }
 
@@ -227,57 +154,177 @@ fun InputScreen(state: UiState, viewModel: BaziViewModel) {
     }
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
-}
+// ------------------------------------------------------------------ 生辰
 
 @Composable
-private fun NumberField(
-    value: String,
-    onChange: (String) -> Unit,
-    suffix: String,
-    modifier: Modifier = Modifier
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(suffix) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = modifier
-    )
-}
+private fun BirthPanel(state: UiState, viewModel: BaziViewModel) {
+    val leap = state.lunarLeap
+    val lunarMonths = remember(leap) { lunarMonthOptions(leap) }
+    val monthLabels = if (state.calendarType == CalendarType.SOLAR) {
+        SOLAR_MONTHS
+    } else {
+        lunarMonths.map { it.first }
+    }
+    val monthIndex = if (state.calendarType == CalendarType.SOLAR) {
+        (state.month - 1).coerceIn(0, 11)
+    } else {
+        lunarMonths
+            .indexOfFirst { it.second.first == state.month && it.second.second == state.leapMonth }
+            .coerceAtLeast(0)
+    }
+    val dayLabels = remember(state.dayCount) { (1..state.dayCount).map { "$it" } }
 
-@Composable
-private fun ToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+    Panel {
+        Segmented(
+            options = listOf("公历", "农历"),
+            selectedIndex = if (state.calendarType == CalendarType.SOLAR) 0 else 1,
+            onSelect = {
+                viewModel.setCalendarType(
+                    if (it == 0) CalendarType.SOLAR else CalendarType.LUNAR
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(Modifier.fillMaxWidth()) {
+            WheelUnit(
+                label = "年",
+                items = YEARS,
+                selectedIndex = (state.year - 1900).coerceIn(0, YEARS.lastIndex),
+                onSelected = { viewModel.setYear(1900 + it) },
+                modifier = Modifier.weight(1.5f),
+                textSize = 17.sp
+            )
+            WheelUnit(
+                label = "月",
+                items = monthLabels,
+                selectedIndex = monthIndex,
+                onSelected = {
+                    if (state.calendarType == CalendarType.SOLAR) {
+                        viewModel.setMonth(it + 1)
+                    } else {
+                        val option = lunarMonths[it]
+                        viewModel.setLunarMonth(option.second.first, option.second.second)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                textSize = 16.sp
+            )
+            WheelUnit(
+                label = "日",
+                items = dayLabels,
+                selectedIndex = (state.day - 1).coerceIn(0, dayLabels.lastIndex),
+                onSelected = { viewModel.setDay(it + 1) },
+                modifier = Modifier.weight(0.95f),
+                textSize = 16.sp
+            )
+            WheelUnit(
+                label = "时",
+                items = HOURS,
+                selectedIndex = state.hour,
+                onSelected = viewModel::setHour,
+                modifier = Modifier.weight(0.95f),
+                textSize = 16.sp
+            )
+            WheelUnit(
+                label = "分",
+                items = MINUTES,
+                selectedIndex = state.minute,
+                onSelected = viewModel::setMinute,
+                modifier = Modifier.weight(0.95f),
+                textSize = 16.sp
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
+                "${state.shiChen.cn}时 · ${state.shiChen.hourRange}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.weight(1f))
+            if (state.useTrueSolarTime) {
+                Text(
+                    "按真太阳时定时辰",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        HairLine()
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "性别",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(14.dp))
+            Segmented(
+                options = listOf("乾造（男）", "坤造（女）"),
+                selectedIndex = if (state.gender == Gender.MALE) 0 else 1,
+                onSelect = {
+                    viewModel.setGender(if (it == 0) Gender.MALE else Gender.FEMALE)
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+// ------------------------------------------------------------------ 出生地
+
+@Composable
+private fun PlacePanel(state: UiState, viewModel: BaziViewModel, onPickCity: () -> Unit) {
+    Panel {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                .clickable(onClick = onPickCity)
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "出生地",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(state.city.displayName, style = MaterialTheme.typography.bodyLarge)
+            }
+            Text(
+                "%.2f°E".format(state.city.longitude),
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+
+        HairLine()
+
+        ToggleLine(
+            title = "真太阳时校正",
+            subtitle = "按经度差与均时差换算，时柱以此为准",
+            checked = state.useTrueSolarTime,
+            onChange = viewModel::setTrueSolarTime
+        )
+        ToggleLine(
+            title = "23 时后算次日",
+            subtitle = "关闭则 23:00–23:59 仍归当日（早子时派）",
+            checked = state.ziHour == ZiHourSect.LATE,
+            onChange = {
+                viewModel.setZiHour(if (it) ZiHourSect.LATE else ZiHourSect.EARLY)
+            }
+        )
     }
 }
+
+// ------------------------------------------------------------------ 城市选择
 
 @Composable
 private fun CityPickerDialog(onDismiss: () -> Unit, onPick: (City) -> Unit) {
@@ -286,7 +333,7 @@ private fun CityPickerDialog(onDismiss: () -> Unit, onPick: (City) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("选择出生地") },
+        title = { Text("选择出生地", fontFamily = FontFamily.Serif) },
         text = {
             Column {
                 OutlinedTextField(
@@ -294,19 +341,27 @@ private fun CityPickerDialog(onDismiss: () -> Unit, onPick: (City) -> Unit) {
                     onValueChange = { keyword = it },
                     placeholder = { Text("输入城市名") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                LazyColumn(modifier = Modifier.heightIn(max = 340.dp)) {
                     items(results) { city ->
-                        Text(
-                            text = city.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onPick(city) }
-                                .padding(vertical = 12.dp)
-                        )
+                                .padding(vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(city.displayName, style = MaterialTheme.typography.bodyLarge)
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "%.2f°E".format(city.longitude),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

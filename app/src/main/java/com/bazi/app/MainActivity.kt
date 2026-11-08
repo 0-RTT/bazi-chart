@@ -41,7 +41,9 @@ fun BaziApp(viewModel: BaziViewModel = viewModel()) {
     var showChart by rememberSaveable { mutableStateOf(false) }
     val bundle = state.result
 
-    LaunchedEffect(bundle != null) {
+    // 以命盘对象本身为 key：每次重新排盘都会产生新对象，页面自动回到命盘；
+    // 用户主动返回时 bundle 未变，不会又被弹回结果页。
+    LaunchedEffect(bundle) {
         if (bundle != null) showChart = true
     }
 

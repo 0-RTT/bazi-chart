@@ -1,20 +1,19 @@
-# 八字排盘 · Android（v0.1.0）
+# 八字排盘 · Android（v0.2.0）
 
 面向命理从业者的专业排盘工具。Kotlin + Jetpack Compose，**全程离线**（连 `INTERNET` 权限都没申请）。
 
 输入公历或农历生辰 + 性别 + 出生地，输出四柱、十神、藏干、纳音、旬空、胎元命宫身宫、大运、流年、五行力量、旺衰、格局、调候、神煞、刑冲合害，并附规则模板解读。
 
+本版两个重点：**日期时间改为滚轮选择**、**排盘后自动生成一段可直接交给大模型的 AI 分析指令**。
+
 ---
 
-## 一、先说明验证边界（重要）
-
-本机环境**没有 JDK、没有 Android SDK、Shell 也无法访问 Maven 仓库**，所以这份代码：
+## 一、验证边界
 
 - **已验证** — 核心算法用可执行方式验证过：用 Python 按同一套表和同一套公式独立实现，跑通 **119 项断言**，对撞 6tail/lunar 官方示例输出、2024 年 24 节气权威时刻、子平法通行表。
-- **已验证** — tyme4kt 的 API 不是猜的：逐一读取了其 master 分支源码（`SolarTime.kt` / `EightChar.kt` / `ChildLimit.kt` / `DecadeFortune.kt` / `SixtyCycle.kt` / `LunarHour.kt` / `LunarYear.kt`），按真实签名调用。
-- **待确认** — Android 端未经编译：Gradle 配置、Compose 代码、tyme4kt 的 Android 依赖解析，都需要你首次在 Android Studio 里构建时确认。
-
-这是有意为之的取舍：与其交一堆"看起来能编译"却没验证过算法的代码，不如把可验证的部分真正验证掉，并明确标出不可验证的边界。
+- **已验证** — tyme4kt 的 API 不是猜的：逐一读取了其 master 分支源码（`SolarTime.kt` / `EightChar.kt` / `ChildLimit.kt` / `DecadeFortune.kt` / `SixtyCycle.kt` / `LunarHour.kt` / `LunarYear.kt` / `LunarMonth.kt`），按真实签名调用。
+- **已验证** — 编译：GitHub Actions 上 `assembleDebug` 通过，产出可安装 APK（见第七节）。
+- **待真机确认** — 滚轮手感（吸附速度、惯性）、衬线字体在各厂商 ROM 上的实际观感、深色模式对比度。这些只能在真机上看。
 
 ---
 
@@ -30,6 +29,7 @@ bazi-app/
 │  │   ├─ Model.kt             BirthInput / SectConfig / City / SolarCorrection
 │  │   ├─ TrueSolarTime.kt     经度差 + 均时差（NOAA），自研
 │  │   ├─ CalendarConverter.kt 公农历互转、节气、八字装配
+│  │   ├─ MonthLength.kt       公历/农历每月天数（滚轮选日的依据）
 │  │   └─ CityDatabase.kt      54 个城市经纬度
 │  ├─ bazi/              排盘引擎（纯 Kotlin，零 Android 依赖）
 │  │   ├─ GanZhi.kt            五行/天干/地支/十神
@@ -42,13 +42,21 @@ bazi-app/
 │  │   ├─ Tiaohou.kt           调候（10 干 × 12 月令查表）
 │  │   ├─ ShenSha.kt           神煞（全表驱动）
 │  │   └─ Analyzer.kt          分析总成
-│  └─ interpret/         规则模板解读
+│  └─ interpret/         规则模板解读 + AI 指令
 │      ├─ Interpreter.kt       三段式：结构化量 → 规则匹配 → 文案拼装
+│      ├─ AiPrompt.kt          AI 分析指令生成（命盘全量 + 九项任务）
 │      └─ TextBank.kt          文案库
 ├─ app/                  Android + Compose
 │  ├─ MainActivity.kt
 │  ├─ BaziViewModel.kt
-│  └─ ui/  Theme / InputScreen / ChartScreen / FortuneScreen
+│  └─ ui/
+│     ├─ Theme.kt              纸/墨/朱砂 设计 Token + 衬线字号体系
+│     ├─ Components.kt         Panel / SectionTitle / Segmented / Tag 等版式件
+│     ├─ WheelPicker.kt        滚轮选择器（LazyColumn 吸附，不用实验 API）
+│     ├─ InputScreen.kt        录入：年月日时分滚轮
+│     ├─ ChartScreen.kt        命盘：四柱表格 + 五行 + 格局 + 神煞
+│     ├─ FortuneScreen.kt      运程：横向大运带 + 选中运的流年
+│     └─ InterpretScreen.kt    断语 + AI 指令页
 └─ tools/verify/         Python 校验脚本（可独立运行）
    ├─ verify_tables.py
    ├─ verify_analysis.py
@@ -131,18 +139,51 @@ $ python tools/verify/verify_truesolar.py
 - **五行打分**：与手算期望值逐项对齐（误差 < 1e-9）
 - **真太阳时**：均时差极值、每度 4 分钟、时辰边界、极端经度跨时辰
 
-另有 `core/bazi/src/test/` 下的 JVM 回归测试（需 Gradle 环境运行）。
+另有 `core/bazi/src/test/`、`core/calendar/src/test/`、`core/interpret/src/test/` 下的 JVM 回归测试（CI 会跑）。
 
 ---
 
-## 五、构建
+## 五、界面
+
+风格取「纸、墨、朱砂」三色：暖白纸底、墨色正文、朱砂点睛，衬线字做干支，不用渐变与投影。版式参照问真八字这类专业排盘工具的信息组织方式，但配色与字体是自研的。
+
+**录入页**：年月日时分五列滚轮，改为直接滚动选择，不再手打数字。
+
+- 滚轮用定高 `LazyColumn` + 上下对称留白让选中项落在正中，停手后按偏移量算最近项再动画吸附。**刻意没用 foundation 的 snap fling 实验 API**——那套接口在小版本间改过签名，宁可自己吸附也不赌依赖升级。
+- 「日」列的天数按当前年月实时计算：公历走 `LocalDate.lengthOfMonth()`，农历走 tyme4kt 的朔望推算（大月 30 / 小月 29）。**农历月长没有规律，固定 30 天一定会让用户选到不存在的日期。**
+- 农历年份自动带出「闰 X 月」选项，插在本月之后，与专业工具的习惯一致。
+- 滚轮下方实时显示所属时辰与区间（如「巳时 · 09:00–10:59」），勾了真太阳时换算会额外提示。
+
+**命盘页**：四柱做成一张真正的表——左侧细窄行标（十神/藏干/支神/星运/空亡/纳音），四列以细线分隔，天干地支用 31sp 衬线大字按五行着色，日主一格标朱砂。下方依次是五行堆叠条、格局与调候、神煞、刑冲合害、胎元命宫身宫。
+
+**运程页**：横向大运带（可点选，当运标朱砂），选中某步运后在下方铺开它的十个流年格子，当运与当年都有标记。
+
+**断语页**：规则模板生成的解读，按板块分卡，带序号。
+
+---
+
+## 六、AI 分析指令
+
+排盘一完成，`AiPromptBuilder` 就同步生成一段 Markdown 指令（`ChartBundle.aiPrompt`），在「AI」页可一键复制，或从命盘页底部的横幅进入。
+
+这段文本的取法有三个考量：
+
+1. **命盘数据一次给全**。四柱、十神、藏干、藏干十神、纳音、星运、空亡、五行得分、旺衰、格局取格依据、调候、神煞、刑冲合害、八步大运、未来六年流年，全用表格给出。指令开头明确写「**不要重新排盘、不要改动任何干支**」——否则模型会自己"推算"出另一套盘。
+2. **任务边界写死**。九项任务：旺衰复核、格局成败、用神喜忌、性格、事业财运、婚姻、健康、大运流年逐年、可执行建议。每条都要求落到具体干支与宫位。
+3. **输出约束写死**。先结论后依据（括号注明依据）、术语附白话、分歧要标注「此处有分歧，本分析取…」、不预测生死、不诊断疾病、不承诺收益。
+
+不联网、不调用任何 API，纯文本生成，159 行的 `AiPrompt.kt` 里没有一行网络代码。
+
+---
+
+## 七、构建
 
 ```bash
 # 本地编译需要：JDK 17+、Android Studio（含 SDK Platform 34）
 # 仓库未提交 gradle-wrapper.jar（二进制无法离线生成），首次克隆后先补：
 gradle wrapper --gradle-version 8.7
 
-./gradlew :core:bazi:test      # 先跑引擎回归
+./gradlew :core:calendar:test :core:bazi:test :core:interpret:test   # 先跑引擎回归
 ./gradlew :app:assembleDebug
 ```
 
@@ -155,14 +196,14 @@ gradle wrapper --gradle-version 8.7
 `.github/workflows/android.yml` 已配好，推到 GitHub 后自动执行：
 
 1. `verify-engine` —— 跑三个 Python 校验脚本（119 项断言）。算法不对，后面直接不构建。
-2. `build` —— 装 JDK 17 + SDK 34，跑 `:core:bazi:test`，再构建 Debug APK。
+2. `build` —— 装 JDK 17 + SDK 34，跑 `:core:calendar:test` / `:core:bazi:test` / `:core:interpret:test`，再构建 Debug APK。
 3. 产物 `bazi-debug-apk` 挂在 Actions 页面该次运行的 Artifacts 中，下载即可安装。
 
 这样即便本机没有 Android 环境，也能拿到可安装的 APK。构建失败时 `build-reports` 会带上 Gradle 报错与测试报告。
 
 ---
 
-## 六、已知限制与待办
+## 八、已知限制与待办
 
 **未实现（P1/P2）**
 
@@ -179,16 +220,20 @@ gradle wrapper --gradle-version 8.7
 - **神煞查法**：不同典籍口径不一（如天乙贵人有「甲戊庚牛羊」与「甲戊兼牛羊」两说），当前取通行本，已做成纯数据表，改口径只需改表。
 - **藏干余气**：权重 1.0/0.5/0.2 为教学折中值，非某一流派原典数值。
 
-**未验证**
+**待真机确认**
 
-- Android 编译与真机运行
-- tyme4kt 在 Android 目标上的依赖解析（KMP 库，可能需要 `-jvm` 变体；核心模块已是 `kotlin("jvm")`，理论上可直接被 Android 消费）
+- 滚轮吸附手感与惯性（真机上才好判断）
+- 衬线字体（`FontFamily.Serif`）在各厂商 ROM 上是否落到宋体，否则会退化成黑体
+- 深色模式下五行色的对比度
+
+tyme4kt 在 Android 目标上的依赖解析已随 CI 构建通过：核心模块是 `kotlin("jvm")`，Android 侧直接消费其 JVM 变体即可。
 
 ---
 
-## 七、下一步建议
+## 九、下一步建议
 
-1. 在 Android Studio 里跑通 `assembleDebug`，把编译问题清零
+1. 装到真机上看滚轮手感，必要时调 `itemHeight` 与吸附阈值
 2. 接入 Room 做命例管理——从业者要反复查客户盘，这是留存关键
 3. 用权威排盘工具批量生成 200+ 命例 fixture，补上 `core:bazi` 的回归测试
 4. 请一位从业者审校调候表与神煞查法，把「数据待审校」的标签去掉
+5. AI 指令可再扩：支持自定义"追问模板"（只看婚姻 / 只看某年）

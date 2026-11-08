@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: 引擎回归测试
-        run: gradle :core:bazi:test --no-daemon --stacktrace
+        run: gradle :core:calendar:test :core:bazi:test :core:interpret:test --no-daemon --stacktrace
 
       - name: 构建 Debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
