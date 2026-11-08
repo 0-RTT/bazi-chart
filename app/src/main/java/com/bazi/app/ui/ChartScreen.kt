@@ -131,7 +131,9 @@ private fun PlateTable(chart: BaziChart, analysis: AnalysisResult) {
     val male = chart.input.gender == Gender.MALE
     val pillars = chart.pillars
     val surface = MaterialTheme.colorScheme.surface
-    val sunken = MaterialTheme.colorScheme.surfaceSunken
+    // 表头浅底。用 surfaceVariant 而不是设计里的 surfaceSunken——
+    // 后者只是 BaziTokens 的私有 Token，没有进 ColorScheme，取不到。
+    val sunken = MaterialTheme.colorScheme.surfaceVariant
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val primary = MaterialTheme.colorScheme.primary
 
