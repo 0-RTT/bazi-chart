@@ -34,6 +34,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bazi.app.ChartBundle
@@ -51,6 +56,30 @@ private val CHIP_WIDTH = 68.dp
 
 /** 大运格底部「当运」那一行的高度。写死是为了让十格严格等高，见 [LuckChip]。 */
 private val CHIP_FOOT = 13.dp
+
+/**
+ * 吞掉横向滚动余量。
+ *
+ * 三页改成并排 Pager 之后引入了一个新的误触：LazyRow 滚到尽头时，剩余的横向
+ * 滑动会冒泡给外层 Pager，于是「想把大运带推到最后一格」变成「整页翻走了」，
+ * 而且翻走之后还得滑回来。这个连接器只吃横向余量，纵向照常往上传递。
+ */
+private object HorizontalOnly : NestedScrollConnection {
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource
+    ): Offset = Offset(available.x, 0f)
+
+    /**
+     * 惯性也要拦。
+     *
+     * 只拦位移是不够的：手指抬起时 LazyRow 还带着速度，这股余速会作为
+     * onPostFling 冒泡上去，于是「快速划一下大运带」仍然会整页翻走。
+     */
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+        Velocity(available.x, 0f)
+}
 
 /**
  * 运程页。
@@ -109,6 +138,8 @@ fun FortuneTab(bundle: ChartBundle) {
             }
             LazyRow(
                 state = luckRow,
+                // 见 [HorizontalOnly]：不吞余量就会「推到底」变成「翻页」。
+                modifier = Modifier.nestedScroll(HorizontalOnly),
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

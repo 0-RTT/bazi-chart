@@ -142,6 +142,13 @@ check("snapshotFlow" in fortune,
       "大运带的居中未等待首次布局，首帧 scroll 会被静默丢弃")
 check("state = luckRow" in fortune, "LazyRow 未接上滚动状态")
 
+# Pager 引入的新误触：LazyRow 滚到尽头后余量冒泡，会变成「整页翻走」。
+# 位移与惯性都要拦——只拦位移，快速一划仍然会翻页。
+check("HorizontalOnly" in fortune, "大运带未拦横向滚动余量，推到底会翻页")
+check("onPostScroll" in fortune, "未拦横向滚动余量（位移）")
+check("onPostFling" in fortune, "未拦横向滚动余量（惯性），快划仍会翻页")
+check("available.x" in fortune, "拦余量时未区分横纵，纵向会被一起吃掉")
+
 # 页签：三页并排交给 Pager，不许再用「淡入淡出」——
 # 两页都是长列表，交叉期间同一帧里能看到两份错位的文字，这就是「动画很怪」的来源。
 check("rememberPagerState" in chart, "页签未改用 Pager")
