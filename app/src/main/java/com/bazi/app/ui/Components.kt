@@ -13,9 +13,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -24,7 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,9 +41,14 @@ import java.time.LocalDateTime
 /**
  * 通用版式件。
  *
- * 全站统一用「薄边、小圆角、无投影」的面板语言，
+ * 全站统一「薄边、大圆角（16dp）、无投影」的面板语言，
  * 让视觉重心落在干支与数字上，而不是容器本身。
  */
+object Radii {
+    val panel = RoundedCornerShape(16.dp)
+    val chip = RoundedCornerShape(12.dp)
+    val tag = RoundedCornerShape(5.dp)
+}
 
 @Composable
 fun Panel(
@@ -45,17 +58,94 @@ fun Panel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(Radii.panel)
             .background(MaterialTheme.colorScheme.surface)
-            .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .border(0.5.dp, MaterialTheme.colorScheme.outline, Radii.panel)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         content = content
     )
 }
 
-/** 小节标题：左侧一道朱砂短线 + 标题，右侧可挂辅助文字。 */
+/**
+ * 页面头部。
+ *
+ * 不用 Material 的 TopAppBar：那套是 64dp 平板矩形 + 直角下沿，
+ * 在纸感版式里显得硬。这里换成「圆形返回键 + 衬线标题 + 副标题」，
+ * 高度收到 56dp，与卡片的大圆角语言对齐。
+ */
 @Composable
-fun SectionTitle(text: String, trailing: String? = null) {
+fun ScreenHeader(
+    title: String,
+    subtitle: String? = null,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .height(56.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (onBack != null) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+        }
+
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontFamily = FontFamily.Serif,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        actions()
+    }
+}
+
+/** 头部与内容之间的分隔线。 */
+@Composable
+fun HeaderDivider() {
+    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline)
+}
+
+/** 小节标题：左侧一道朱砂短线 + 标题，右侧可挂辅助文字或操作。 */
+@Composable
+fun SectionTitle(
+    text: String,
+    trailing: String? = null,
+    action: (@Composable () -> Unit)? = null
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -73,14 +163,17 @@ fun SectionTitle(text: String, trailing: String? = null) {
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface
         )
-        if (trailing != null) {
+        if (trailing != null || action != null) {
             Spacer(Modifier.weight(1f))
+        }
+        if (trailing != null) {
             Text(
                 trailing,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (action != null) action()
     }
 }
 
@@ -109,7 +202,8 @@ fun InfoLine(label: String, value: String, labelWidth: Dp = 62.dp) {
 
 /**
  * 分段选择器。
- * 用「轨道 + 浮起的小块」而非 Material 的 TabRow，视觉更接近纸质表单。
+ * 用「轨道 + 浮起的小块」而非 Material 的 TabRow，视觉更接近纸质表单，
+ * 也让页面顶部与内容里出现的是同一种控件语言。
  */
 @Composable
 fun Segmented(
@@ -120,7 +214,7 @@ fun Segmented(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(Radii.chip)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -130,7 +224,7 @@ fun Segmented(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(9.dp))
                     .background(
                         if (selected) MaterialTheme.colorScheme.surface else Color.Transparent
                     )
@@ -146,7 +240,8 @@ fun Segmented(
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    },
+                    maxLines = 1
                 )
             }
         }
@@ -185,7 +280,7 @@ fun Tag(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant)
         fontSize = 11.sp,
         color = color,
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(Radii.tag)
             .background(color.copy(alpha = 0.10f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     )

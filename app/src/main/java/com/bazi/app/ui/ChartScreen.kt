@@ -14,21 +14,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -59,90 +52,44 @@ private val RAIL_WIDTH = 26.dp
  *
  * 版式取「碑帖表格」的路子：四柱居中做成一张真正的表，行列皆有细线，
  * 天干地支用衬线大字并按五行着色；其余分析以纸质面板分块挂在下方。
+ * 顶部与录入页共用 [ScreenHeader]，页面内的切换用 [Segmented] 胶囊，
+ * 保证两屏是同一套控件语言。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    val chart = bundle.chart
     val tabs = listOf("命盘", "运程", "断语", "AI")
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        bundle.chart.ganZhiText,
-                        fontFamily = FontFamily.Serif,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Medium,
-                        letterSpacing = 3.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            TabStrip(tabs, tab) { tab = it }
-            HorizontalDivider(
-                thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.outline
-            )
-            // 用 weight 精确给出剩余高度：否则可滚动内容会按整屏高度测量，
-            // 末尾几十 dp 滚不到底。
-            Box(Modifier.weight(1f)) {
-                when (tab) {
-                    0 -> ChartTab(bundle) { tab = 3 }
-                    1 -> FortuneTab(bundle)
-                    2 -> InterpretTab(bundle.interpretation)
-                    else -> AiPromptTab(bundle)
-                }
-            }
-        }
-    }
-}
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        ScreenHeader(
+            title = chart.ganZhiText,
+            subtitle = buildString {
+                append(if (chart.input.gender == Gender.MALE) "乾造" else "坤造")
+                append(" · 日主").append(chart.dayMaster.cn).append(chart.dayMaster.wuXing.cn)
+                append(" · 属").append(chart.moment.lunar.zodiac)
+            },
+            onBack = onBack
+        )
+        HeaderDivider()
 
-@Composable
-private fun TabStrip(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
-        tabs.forEachIndexed { index, label ->
-            val isSelected = index == selected
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onSelect(index) }
-                    .padding(top = 8.dp, bottom = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    label,
-                    fontSize = 14.sp,
-                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    Modifier
-                        .width(16.dp)
-                        .height(2.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent
-                        )
-                )
+        Segmented(
+            options = tabs,
+            selectedIndex = tab,
+            onSelect = { tab = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+
+        // 用 weight 精确给出剩余高度：否则可滚动内容会按整屏高度测量，
+        // 末尾几十 dp 滚不到底。
+        Box(Modifier.weight(1f).navigationBarsPadding()) {
+            when (tab) {
+                0 -> ChartTab(bundle) { tab = 3 }
+                1 -> FortuneTab(bundle)
+                2 -> InterpretTab(bundle.interpretation)
+                else -> AiPromptTab(bundle)
             }
         }
     }
@@ -171,7 +118,7 @@ private fun ChartTab(bundle: ChartBundle, onOpenAi: () -> Unit) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
                     .clickable(onClick = onOpenAi)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -265,9 +212,9 @@ private fun PlatePanel(chart: BaziChart) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(Radii.panel)
             .background(MaterialTheme.colorScheme.surface)
-            .border(0.5.dp, outline, RoundedCornerShape(14.dp))
+            .border(0.5.dp, outline, Radii.panel)
             .padding(vertical = 10.dp, horizontal = 2.dp)
     ) {
         PlateRow(null, chart.pillars, 20.dp) { p ->

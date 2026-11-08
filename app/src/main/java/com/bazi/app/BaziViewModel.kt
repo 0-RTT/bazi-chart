@@ -1,9 +1,12 @@
 package com.bazi.app
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bazi.analysis.AnalysisResult
 import com.bazi.analysis.ChartAnalyzer
+import com.bazi.app.data.HistoryEntry
+import com.bazi.app.data.HistoryStore
 import com.bazi.calendar.BirthInput
 import com.bazi.calendar.CalendarType
 import com.bazi.calendar.City
@@ -54,6 +57,17 @@ data class UiState(
     val useTrueSolarTime: Boolean = true,
     val ziHour: ZiHourSect = ZiHourSect.LATE,
     val result: ChartBundle? = null,
+    /**
+     * 是否展示结果页。
+     *
+     * 刻意做成显式状态而不是「result != null」：同一个生辰重复排盘时，
+     * 新命盘与旧命盘内容完全相等，既会被 StateFlow 去重、也会让
+     * LaunchedEffect(result) 的 key 不变，导致「再点一次排盘没反应」。
+     */
+    val showResult: Boolean = false,
+    /** 每次成功排盘自增，保证状态一定发生变化，也便于排查。 */
+    val revision: Int = 0,
+    val history: List<HistoryEntry> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null
 ) {
@@ -66,11 +80,17 @@ data class UiState(
     /** 农历该年的闰月；0 表示无闰月。 */
     val lunarLeap: Int
         get() = if (calendarType == CalendarType.LUNAR) MonthLength.lunarLeapMonth(year) else 0
+
+    /** 滚轮上正在选的时间，用于在排盘前把「将被使用的值」明确显示出来。 */
+    val selectionText: String
+        get() = "%04d-%02d-%02d %02d:%02d".format(year, month, day, hour, minute)
 }
 
-class BaziViewModel : ViewModel() {
+class BaziViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val _state = MutableStateFlow(UiState())
+    private val store = HistoryStore(app)
+
+    private val _state = MutableStateFlow(UiState(history = runCatching { store.load() }.getOrDefault(emptyList())))
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     fun setCalendarType(value: CalendarType) = update { it.copy(calendarType = value) }
@@ -85,6 +105,9 @@ class BaziViewModel : ViewModel() {
     fun setTrueSolarTime(value: Boolean) = update { it.copy(useTrueSolarTime = value) }
     fun setZiHour(value: ZiHourSect) = update { it.copy(ziHour = value) }
     fun clearError() = _state.update { it.copy(error = null) }
+
+    /** 返回录入页。结果保留在状态里，但不展示。 */
+    fun closeResult() = _state.update { it.copy(showResult = false) }
 
     private fun update(block: (UiState) -> UiState) =
         _state.update { block(it).normalized() }
@@ -128,7 +151,18 @@ class BaziViewModel : ViewModel() {
             }
             outcome.fold(
                 onSuccess = { bundle ->
-                    _state.update { it.copy(loading = false, result = bundle) }
+                    val history = saveToHistory(bundle)
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            result = bundle,
+                            // 命中结果页 + revision 自增：即使生辰完全没变，
+                            // 状态也与上一次不同，UI 必然收到新的结果。
+                            showResult = true,
+                            revision = it.revision + 1,
+                            history = history
+                        )
+                    }
                 },
                 onFailure = { error ->
                     _state.update {
@@ -142,6 +176,60 @@ class BaziViewModel : ViewModel() {
             )
         }
     }
+
+    // ------------------------------------------------------------ 历史命例
+
+    /** 一键复用：先回填录入状态，再立即排盘。 */
+    fun reuse(entry: HistoryEntry) {
+        _state.update {
+            it.copy(
+                calendarType = entry.calendarType,
+                year = entry.year,
+                month = entry.month,
+                day = entry.day,
+                hour = entry.hour,
+                minute = entry.minute,
+                leapMonth = entry.leapMonth,
+                gender = entry.gender,
+                city = entry.city,
+                useTrueSolarTime = entry.useTrueSolarTime,
+                ziHour = entry.ziHour
+            ).normalized()
+        }
+        calculate()
+    }
+
+    fun deleteHistory(entry: HistoryEntry) {
+        val next = runCatching { store.remove(entry.id) }.getOrDefault(_state.value.history - entry)
+        _state.update { it.copy(history = next) }
+    }
+
+    fun clearHistory() {
+        runCatching { store.clear() }
+        _state.update { it.copy(history = emptyList()) }
+    }
+
+    private fun saveToHistory(bundle: ChartBundle): List<HistoryEntry> {
+        val chart = bundle.chart
+        val input = chart.input
+        val entry = HistoryEntry(
+            id = System.currentTimeMillis(),
+            calendarType = input.calendarType,
+            year = input.year,
+            month = if (input.month < 0) -input.month else input.month,
+            day = input.day,
+            hour = input.hour,
+            minute = input.minute,
+            leapMonth = input.isLeapMonth,
+            gender = input.gender,
+            city = input.city,
+            useTrueSolarTime = input.sect.useTrueSolarTime,
+            ziHour = input.sect.ziHour,
+            ganZhi = chart.ganZhiText,
+            lunarText = chart.moment.lunar.text
+        )
+        return runCatching { store.add(entry) }.getOrDefault(_state.value.history)
+    }
 }
 
 /**
@@ -153,7 +241,7 @@ class BaziViewModel : ViewModel() {
 private fun UiState.normalized(): UiState = when (calendarType) {
     CalendarType.SOLAR -> {
         val max = MonthLength.solarDayCount(year, month)
-        copy(month = month.coerceIn(1, 12), day = day.coerceIn(1, max))
+        copy(year = year.coerceIn(1900, 2100), month = month.coerceIn(1, 12), day = day.coerceIn(1, max))
     }
 
     CalendarType.LUNAR -> {
@@ -161,6 +249,11 @@ private fun UiState.normalized(): UiState = when (calendarType) {
         val m = month.coerceIn(1, 12)
         val keepLeap = leapMonth && leap == m
         val max = MonthLength.lunarDayCount(year, if (keepLeap) -m else m)
-        copy(month = m, leapMonth = keepLeap, day = day.coerceIn(1, max))
+        copy(
+            year = year.coerceIn(1900, 2100),
+            month = m,
+            leapMonth = keepLeap,
+            day = day.coerceIn(1, max)
+        )
     }
 }

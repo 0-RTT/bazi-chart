@@ -7,11 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,20 +31,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * 顶层路由。
+ *
+ * 路由完全由 ViewModel 的 [UiState.showResult] 决定，不在 Composable 里用
+ * LaunchedEffect 监听取值——那套写法依赖对象相等性，重复排同一生辰时会失效。
+ */
 @Composable
 fun BaziApp(viewModel: BaziViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showChart by rememberSaveable { mutableStateOf(false) }
     val bundle = state.result
 
-    // 以命盘对象本身为 key：每次重新排盘都会产生新对象，页面自动回到命盘；
-    // 用户主动返回时 bundle 未变，不会又被弹回结果页。
-    LaunchedEffect(bundle) {
-        if (bundle != null) showChart = true
-    }
-
-    if (showChart && bundle != null) {
-        ChartScreen(bundle = bundle, onBack = { showChart = false })
+    if (state.showResult && bundle != null) {
+        ChartScreen(bundle = bundle, onBack = viewModel::closeResult)
     } else {
         InputScreen(state = state, viewModel = viewModel)
     }

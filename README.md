@@ -1,10 +1,10 @@
-# 八字排盘 · Android（v0.2.0）
+# 八字排盘 · Android（v0.3.0）
 
 面向命理从业者的专业排盘工具。Kotlin + Jetpack Compose，**全程离线**（连 `INTERNET` 权限都没申请）。
 
 输入公历或农历生辰 + 性别 + 出生地，输出四柱、十神、藏干、纳音、旬空、胎元命宫身宫、大运、流年、五行力量、旺衰、格局、调候、神煞、刑冲合害，并附规则模板解读。
 
-本版两个重点：**日期时间改为滚轮选择**、**排盘后自动生成一段可直接交给大模型的 AI 分析指令**。
+本版三个重点：**日期时间改为滚轮选择**、**排盘后自动生成一段可直接交给大模型的 AI 分析指令**、**历史命例一键复用**。
 
 ---
 
@@ -47,13 +47,16 @@ bazi-app/
 │      ├─ AiPrompt.kt          AI 分析指令生成（命盘全量 + 九项任务）
 │      └─ TextBank.kt          文案库
 ├─ app/                  Android + Compose
-│  ├─ MainActivity.kt
-│  ├─ BaziViewModel.kt
+│  ├─ MainActivity.kt          路由：只读 showResult，不用副作用监听
+│  ├─ BaziViewModel.kt         录入状态 / 排盘 / 历史命例
+│  ├─ data/
+│  │   └─ HistoryStore.kt      历史命例存取（SharedPreferences 行格式）
 │  └─ ui/
 │     ├─ Theme.kt              纸/墨/朱砂 设计 Token + 衬线字号体系
-│     ├─ Components.kt         Panel / SectionTitle / Segmented / Tag 等版式件
-│     ├─ WheelPicker.kt        滚轮选择器（LazyColumn 吸附，不用实验 API）
-│     ├─ InputScreen.kt        录入：年月日时分滚轮
+│     ├─ Components.kt         ScreenHeader / Panel / Segmented / Tag 等版式件
+│     ├─ WheelPicker.kt        自绘滚轮（position 为唯一状态，选中 = round）
+│     ├─ InputScreen.kt        录入：年月日时分滚轮 + 历史
+│     ├─ HistorySection.kt     最近排盘：点按复用 / 删除 / 清空
 │     ├─ ChartScreen.kt        命盘：四柱表格 + 五行 + 格局 + 神煞
 │     ├─ FortuneScreen.kt      运程：横向大运带 + 选中运的流年
 │     └─ InterpretScreen.kt    断语 + AI 指令页
@@ -176,7 +179,52 @@ $ python tools/verify/verify_truesolar.py
 
 ---
 
-## 七、构建
+## 七、v0.3.0：三个修复与历史命例
+
+### 修复一：返回后再点排盘没反应
+
+根因是两层叠加，两层的判据都是**对象相等性**：
+
+1. `MutableStateFlow` 用 `equals` 去重。同一个生辰重排一次，产出的 `ChartBundle` 与上一次逐字段相等，
+   `_state.update { it.copy(result = newBundle, loading = false) }` 得到的新值与旧值相等，**状态根本不发射**，
+   UI 连重组都不会发生。
+2. 即便发射了，`LaunchedEffect(bundle)` 的 key 也是按 `equals` 比较的——key 没变，副作用不会重启。
+
+所以「再点一次排盘」什么都不会发生。而切换历法改变了输入、算出的是另一张盘，才「碰巧」能重排——这正是你观察到的现象。
+
+修复：路由改成 ViewModel 里的显式 `showResult`，配合每次成功排盘自增的 `revision`；Composable 只读状态，
+不再用副作用监听命盘对象。顺带的好处是旋转屏幕后仍停在结果页。
+
+### 修复二：选了时间，排出来还是 1990
+
+根因在滚轮取索引的算法。旧实现用定高 `LazyColumn` + `contentPadding` 做居中，
+再用 `firstVisibleItemIndex + firstVisibleItemScrollOffset / itemHeight` 反推选中项。这个反推是错的：
+
+- `firstVisibleItemIndex` 指的是**第一个可见项**，而居中项前面永远还压着 `visibleCount / 2` 项
+  （它们被画进了 `contentPadding` 区域），于是读出来的索引比视觉中心小 2；
+- 这个偏了 2 的索引又被 `scrollToItem` 拿去重新定位，滚一次偏一次，最终表现就是「怎么选都还是原来那个年份」。
+
+修复：滚轮改成自绘。位置是一个连续的 `Float`（单位＝行），第 `i` 行偏移 `= (i - position) * itemHeight + centerTop`，
+选中项 `= round(position)`——绘制和取值用的是**同一个量**，不存在两套口径。停手后按速度做一次短程投影再吸附。
+另外在滚轮下方直接写出「将被使用的值」（如 `公历 1995-03-08 14:20 · 申时`），排盘用的是不是这一行，一眼可见。
+
+### 新增：历史命例
+
+- 每次排盘成功自动入栈；同一生辰不重复堆积，顶到最前；上限 30 条。
+- 存 `SharedPreferences` 自定义行格式，不引 Room、不引序列化库；解析失败的行直接跳过，坏数据不连累排盘。
+- 只存「输入 + 四柱/农历两个展示文本」，不存整张命盘——重算一次不到 50ms，存整盘（含 100 年流年）体积要大几十倍，
+  还会在引擎口径调整后留下陈旧数据。
+- 录入页顶部「最近排盘」：默认 3 条、可展开全部，点一条回填并**立即重排**，单条可删、可一键清空。
+
+### 顶部样式
+
+Material 的 `TopAppBar` 是 64dp 直角矩形 + 直角下沿，和卡片的 16dp 圆角不是一套语言——这就是「顶部直角」的来源。
+换成自定义 `ScreenHeader`：56dp、32dp 圆形返回键、衬线标题 + 副标题；页面内切换从下划线 Tab 换成与「公历/农历」
+同款的胶囊 `Segmented`；面板圆角统一 16dp、分段块 12dp、标签 5dp。
+
+---
+
+## 八、构建
 
 ```bash
 # 本地编译需要：JDK 17+、Android Studio（含 SDK Platform 34）
@@ -203,7 +251,7 @@ gradle wrapper --gradle-version 8.7
 
 ---
 
-## 八、已知限制与待办
+## 九、已知限制与待办
 
 **未实现（P1/P2）**
 
@@ -230,7 +278,7 @@ tyme4kt 在 Android 目标上的依赖解析已随 CI 构建通过：核心模�
 
 ---
 
-## 九、下一步建议
+## 十、下一步建议
 
 1. 装到真机上看滚轮手感，必要时调 `itemHeight` 与吸附阈值
 2. 接入 Room 做命例管理——从业者要反复查客户盘，这是留存关键
