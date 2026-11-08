@@ -20,7 +20,16 @@ enum class ZiHourSect { LATE, EARLY }
  */
 data class SectConfig(
     val ziHour: ZiHourSect = ZiHourSect.LATE,
-    val useTrueSolarTime: Boolean = true,
+    /**
+     * 真太阳时校正。**默认关闭**。
+     *
+     * 校正是对的（经度差 + 均时差），但它会把钟表时推离整点，
+     * 于是贴着时辰边界出生的盘会整体错一个时辰：
+     * 07:00 生于北京，校正后 06:40 就从辰时落回卯时。
+     * 通行排盘工具默认按钟表时定时辰，本应用与之一致；
+     * 需要校正的用户可在录入页显式开启。
+     */
+    val useTrueSolarTime: Boolean = false,
     /**
      * 夏令时手工扣减分钟数。1986–1991 年中国实行夏令时，
      * 若出生时间来自当时钟表且未还原，应填 -60。

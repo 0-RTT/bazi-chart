@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test
 /**
  * 四柱表数据的回归。
  *
- * 基准取自一张已核对过的命盘：己卯 甲戌 丙午 壬辰（乾造）。
- * 四柱的「自坐」与「空亡」都能逐柱手算，正好用来钉住两处最容易混的字段：
+ * 基准是一组构造四柱（合法组合，非真实命例）：丁酉 甲申 丙午 壬寅。
+ * 「自坐」与「空亡」都能逐柱手算，正好用来钉住两处最容易混的字段：
  *
  * - 自坐 = 本柱天干坐本柱地支的长生，与日主无关；
  * - 空亡 = 本柱自身干支所属之旬的两个空支，四柱各不相同。
@@ -19,10 +19,10 @@ class PlateDataTest {
     @Test
     @DisplayName("自坐按本柱天干取长生，与日主无关")
     fun ownGrowthPhase() {
-        assertEquals(GrowthPhase.BING, GrowthPhaseTable.of(TianGan.JI, DiZhi.MAO))
-        assertEquals(GrowthPhase.YANG, GrowthPhaseTable.of(TianGan.JIA, DiZhi.XU))
+        assertEquals(GrowthPhase.CHANG_SHENG, GrowthPhaseTable.of(TianGan.DING, DiZhi.YOU))
+        assertEquals(GrowthPhase.JUE, GrowthPhaseTable.of(TianGan.JIA, DiZhi.SHEN))
         assertEquals(GrowthPhase.DI_WANG, GrowthPhaseTable.of(TianGan.BING, DiZhi.WU))
-        assertEquals(GrowthPhase.MU, GrowthPhaseTable.of(TianGan.REN, DiZhi.CHEN))
+        assertEquals(GrowthPhase.BING, GrowthPhaseTable.of(TianGan.REN, DiZhi.YIN))
     }
 
     @Test
@@ -33,20 +33,20 @@ class PlateDataTest {
             GrowthPhaseTable.of(TianGan.BING, DiZhi.WU),
             GrowthPhaseTable.of(TianGan.BING, DiZhi.WU)
         )
-        // 年柱若按日主取则是丙坐卯（沐浴），按自坐取则是己坐卯（病），二者必须不同。
-        assertEquals(GrowthPhase.MU_YU, GrowthPhaseTable.of(TianGan.BING, DiZhi.MAO))
-        assertEquals(GrowthPhase.BING, GrowthPhaseTable.of(TianGan.JI, DiZhi.MAO))
+        // 年柱若按日主取则是丙坐酉（死），按自坐取则是丁坐酉（长生），二者必须不同。
+        assertEquals(GrowthPhase.SI, GrowthPhaseTable.of(TianGan.BING, DiZhi.YOU))
+        assertEquals(GrowthPhase.CHANG_SHENG, GrowthPhaseTable.of(TianGan.DING, DiZhi.YOU))
     }
 
     @Test
-    @DisplayName("本柱空亡逐柱不同：己卯申酉、甲戌申酉、丙午寅卯、壬辰午未")
+    @DisplayName("本柱空亡逐柱不同：丁酉辰巳、甲申午未、丙午寅卯、壬寅辰巳")
     fun perPillarVoidBranches() {
         fun void(index: Int) = BaziCalculator.voidBranches(index).map { it.cn }
 
-        assertEquals(listOf("申", "酉"), void(15)) // 己卯
-        assertEquals(listOf("申", "酉"), void(10)) // 甲戌
+        assertEquals(listOf("辰", "巳"), void(33)) // 丁酉
+        assertEquals(listOf("午", "未"), void(20)) // 甲申
         assertEquals(listOf("寅", "卯"), void(42)) // 丙午
-        assertEquals(listOf("午", "未"), void(28)) // 壬辰
+        assertEquals(listOf("辰", "巳"), void(38)) // 壬寅
     }
 
     @Test

@@ -1,55 +1,97 @@
-"""神煞查法校验。
+"""神煞查法的多盘校验。
 
-做法与其它脚本不同：这里**独立实现一遍查法表**（不读 Kotlin），
-再与一份实测基准逐柱对撞。
+用三张**构造盘**（非真实命例，不含任何出生时间或地点）逐柱对撞，
+三张合起来覆盖规则表里全部 31 种神煞：
 
-基准盘取自实际排盘工具的结果：
+    构造盘一  丁酉 甲申 丙午 壬寅（纳音火）
+    构造盘二  乙巳 丁卯 庚申 壬辰（纳音火）
+    构造盘三  丁巳 戊申 丙辰 癸未（纳音土）
 
-    己卯 甲戌 丙午 壬辰（乾造，年纳音城头土）
+本脚本用 Python 独立实现一遍查法表，不读 Kotlin 代码，
+然后与期望集合做**精确比较**——多一项、少一项、位置错都算失败。
 
-    年柱  太极贵人、桃花、空亡
-    月柱  太极贵人、华盖
-    日柱  天德贵人、月德贵人、德秀贵人、阴差阳错、六秀日、孤鸾煞、勾绞煞、天喜、羊刃
-    时柱  太极贵人、童子煞
+说明：表格的**外部依据**是查法口诀（见 test_formulas），那部分与具体盘无关；
+具体盘只用来锁住「哪一柱命中」，防止 Kotlin 实现漂移。
+定位口径时曾用外部结果校对，那些命例连同出生信息一律不入库。
 
-这盘的价值在于：它同时考到「按年干查」「按日干查」「按月令查」「按年支查」
-「按日支查」「按年纳音查」「按日柱干支查」七种基准，且各柱数量悬殊，
-顺序错、查法错都会立刻暴露。
+为什么必须精确比较：早先只比「有没有」，于是漏了九项、多了一项
+（华盖自指）也照样"通过"。集合相等才是真对撞。
 """
 
 import os
-import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-passed = 0
-failed = []
-
-
-def check(ok, msg):
-    global passed
-    if ok:
-        passed += 1
-    else:
-        failed.append(msg)
-
-
 GAN = "甲乙丙丁戊己庚辛壬癸"
 ZHI = "子丑寅卯辰巳午未申酉戌亥"
 
-# ------------------------------------------------------------------ 表
+failures = []
+checks = 0
+
+
+def check(cond, msg):
+    global checks
+    checks += 1
+    if not cond:
+        failures.append(msg)
+
+
+# ------------------------------------------------------------------ 基础表
 
 TAI_JI = {
-    "甲": "子午", "乙": "子午",
-    "丙": "卯酉", "丁": "卯酉",
+    "甲": "子午", "乙": "子午", "丙": "卯酉", "丁": "卯酉",
     "戊": "辰戌丑未", "己": "辰戌丑未",
-    "庚": "寅亥", "辛": "寅亥",
-    "壬": "巳申", "癸": "巳申",
+    "庚": "寅亥", "辛": "寅亥", "壬": "巳申", "癸": "巳申",
 }
 
-TIAN_DE_GAN = {"寅": "丁", "辰": "壬", "巳": "辛", "未": "甲", "申": "癸", "戌": "丙", "亥": "乙", "丑": "庚"}
-TIAN_DE_ZHI = {"卯": "申", "午": "亥", "酉": "寅", "子": "巳"}
+TIAN_YI = {
+    "甲": "丑未", "戊": "丑未", "庚": "丑未",
+    "乙": "子申", "己": "子申",
+    "丙": "亥酉", "丁": "亥酉",
+    "壬": "卯巳", "癸": "卯巳",
+    "辛": "午寅",
+}
+
+GUO_YIN = {
+    "甲": "戌", "乙": "亥", "丙": "丑", "丁": "寅", "戊": "丑",
+    "己": "寅", "庚": "辰", "辛": "巳", "壬": "未", "癸": "申",
+}
+
+FU_XING = {
+    "甲": "寅子", "丙": "寅子", "戊": "申", "己": "未", "丁": "亥",
+    "乙": "丑卯", "癸": "丑卯", "庚": "午", "辛": "巳", "壬": "辰",
+}
+
+JIN_YU = {
+    "甲": "辰", "乙": "巳", "丙": "未", "丁": "申", "戊": "未",
+    "己": "申", "庚": "戌", "辛": "亥", "壬": "丑", "癸": "寅",
+}
+
+HONG_YAN = {
+    "甲": "午", "乙": "午", "丙": "寅", "丁": "未", "戊": "辰",
+    "己": "辰", "庚": "戌", "辛": "酉", "壬": "子", "癸": "申",
+}
+
+WEN_CHANG = {
+    "甲": "巳", "乙": "午", "丙": "申", "戊": "申", "丁": "酉",
+    "己": "酉", "庚": "亥", "辛": "子", "壬": "寅", "癸": "卯",
+}
+
+LU_SHEN = {
+    "甲": "寅", "乙": "卯", "丙": "巳", "戊": "巳", "丁": "午",
+    "己": "午", "庚": "申", "辛": "酉", "壬": "亥", "癸": "子",
+}
+
+YANG_REN = {
+    "甲": "卯", "乙": "寅", "丙": "午", "戊": "午", "丁": "巳",
+    "己": "巳", "庚": "酉", "辛": "申", "壬": "子", "癸": "亥",
+}
+
+TIAN_DE = {
+    "寅": "丁", "卯": "申", "辰": "壬", "巳": "辛", "午": "亥", "未": "甲",
+    "申": "癸", "酉": "寅", "戌": "丙", "亥": "乙", "子": "巳", "丑": "庚",
+}
 
 YUE_DE = {
     "寅": "丙", "午": "丙", "戌": "丙",
@@ -65,64 +107,73 @@ DE_XIU = {
     "亥": "甲乙丁壬", "卯": "甲乙丁壬", "未": "甲乙丁壬",
 }
 
-LIU_HE_GROUP = {
-    "申": ("酉", "寅", "辰"), "子": ("酉", "寅", "辰"), "辰": ("酉", "寅", "辰"),
-    "寅": ("卯", "申", "戌"), "午": ("卯", "申", "戌"), "戌": ("卯", "申", "戌"),
-    "巳": ("午", "亥", "丑"), "酉": ("午", "亥", "丑"), "丑": ("午", "亥", "丑"),
-    "亥": ("子", "巳", "未"), "卯": ("子", "巳", "未"), "未": ("子", "巳", "未"),
+GAN_HE = {
+    "甲": "己", "己": "甲", "乙": "庚", "庚": "乙", "丙": "辛",
+    "辛": "丙", "丁": "壬", "壬": "丁", "戊": "癸", "癸": "戊",
 }
-# 桃花、驿马、华盖
-PEACH = {k: v[0] for k, v in LIU_HE_GROUP.items()}
-HORSE = {k: v[1] for k, v in LIU_HE_GROUP.items()}
-CANOPY = {k: v[2] for k, v in LIU_HE_GROUP.items()}
+
+ZHI_HE = {
+    "子": "丑", "丑": "子", "寅": "亥", "亥": "寅", "卯": "戌",
+    "戌": "卯", "辰": "酉", "酉": "辰", "巳": "申", "申": "巳",
+    "午": "未", "未": "午",
+}
+
+# 三合局分组：0 申子辰、1 寅午戌、2 巳酉丑、3 亥卯未
+GROUP_OF = {}
+for _z in "申子辰":
+    GROUP_OF[_z] = 0
+for _z in "寅午戌":
+    GROUP_OF[_z] = 1
+for _z in "巳酉丑":
+    GROUP_OF[_z] = 2
+for _z in "亥卯未":
+    GROUP_OF[_z] = 3
+
+GROUP_PEACH = "酉卯午子"
+GROUP_HORSE = "寅申亥巳"
+GROUP_CANOPY = "辰戌丑未"
+GROUP_WANG = "亥巳申寅"
+GROUP_JIE = "巳亥寅申"
+
+# 孤辰寡宿按**三会方**，不是三合局
+GU_CHEN = {
+    "子": "寅", "丑": "寅", "寅": "巳", "卯": "巳", "辰": "巳",
+    "巳": "申", "午": "申", "未": "申",
+    "申": "亥", "酉": "亥", "戌": "亥", "亥": "寅",
+}
+
+GUA_SU = {
+    "子": "戌", "丑": "戌", "寅": "丑", "卯": "丑", "辰": "丑",
+    "巳": "辰", "午": "辰", "未": "辰",
+    "申": "未", "酉": "未", "戌": "未", "亥": "戌",
+}
+
+HONG_LUAN = {
+    "子": "卯", "丑": "寅", "寅": "丑", "卯": "子", "辰": "亥", "巳": "戌",
+    "午": "酉", "未": "申", "申": "未", "酉": "午", "戌": "巳", "亥": "辰",
+}
 
 TIAN_XI = {
-    "子": "酉", "丑": "申", "寅": "未", "卯": "午",
-    "辰": "巳", "巳": "辰", "午": "卯", "未": "寅",
-    "申": "丑", "酉": "子", "戌": "亥", "亥": "戌",
-}
-
-YANG_REN = {
-    "甲": "卯", "乙": "寅", "丙": "午", "戊": "午",
-    "丁": "巳", "己": "巳", "庚": "酉", "辛": "申",
-    "壬": "子", "癸": "亥",
+    "子": "酉", "丑": "申", "寅": "未", "卯": "午", "辰": "巳", "巳": "辰",
+    "午": "卯", "未": "寅", "申": "丑", "酉": "子", "戌": "亥", "亥": "戌",
 }
 
 YIN_CHA = {"丙子", "丁丑", "戊寅", "辛卯", "壬辰", "癸巳",
            "丙午", "丁未", "戊申", "辛酉", "壬戌", "癸亥"}
 LIU_XIU = {"丙午", "丁未", "戊子", "戊午", "己丑", "己未"}
 GU_LUAN = {"乙巳", "丁巳", "辛亥", "戊申", "甲寅", "戊午", "壬子", "丙午"}
+BA_ZHUAN = {"甲寅", "乙卯", "丁未", "戊戌", "己未", "庚申", "辛酉", "癸丑"}
 
-TONG_ZI = {
-    "金": "午卯", "木": "午卯",
-    "水": "酉戌", "火": "酉戌",
-    "土": "辰巳",
-}
+SEASON_SPRING_AUTUMN = set("寅卯辰申酉戌")
 
-# ------------------------------------------------------------------ 查法
 
-# 与 Kotlin 端 rulesOf 的顺序一致：输出顺序即按此排列。
-ORDER = [
-    "太极贵人", "天乙贵人", "天德贵人", "月德贵人", "德秀贵人",
-    "文昌", "禄神", "阴差阳错", "六秀日", "孤鸾煞",
-    "勾绞煞", "天喜", "桃花", "驿马", "华盖", "羊刃", "童子煞",
-]
+# ------------------------------------------------------------------ 算法
 
-TIAN_YI = {
-    "甲": "丑未", "戊": "丑未", "庚": "丑未",
-    "乙": "子申", "己": "子申",
-    "丙": "亥酉", "丁": "亥酉",
-    "壬": "卯巳", "癸": "卯巳",
-    "辛": "午寅",
-}
-WEN_CHANG = {
-    "甲": "巳", "乙": "午", "丙": "申", "戊": "申", "丁": "酉",
-    "己": "酉", "庚": "亥", "辛": "子", "壬": "寅", "癸": "卯",
-}
-LU_SHEN = {
-    "甲": "寅", "乙": "卯", "丙": "巳", "戊": "巳", "丁": "午",
-    "己": "午", "庚": "申", "辛": "酉", "壬": "亥", "癸": "子",
-}
+def ganzhi_index(gan, zhi):
+    for i in range(60):
+        if GAN[i % 10] == gan and ZHI[i % 12] == zhi:
+            return i
+    raise ValueError(f"非法干支 {gan}{zhi}")
 
 
 def shift(zhi, n):
@@ -130,125 +181,287 @@ def shift(zhi, n):
 
 
 def void_branches(day_gz):
-    """日柱旬空两支。"""
-    idx = None
-    for i in range(60):
-        if GAN[i % 10] + ZHI[i % 12] == day_gz:
-            idx = i
-            break
-    assert idx is not None, day_gz
-    gan, zhi = idx % 10, idx % 12
-    first = ((zhi - gan + 10) % 12 + 12) % 12
-    return ZHI[first] + ZHI[(first + 1) % 12]
+    """日柱旬空：旬首起顺数第 11、12 位。"""
+    i = ganzhi_index(day_gz[0], day_gz[1])
+    start = i - i % 10
+    return {ZHI[(start + 10) % 12], ZHI[(start + 11) % 12]}
 
 
-def analyze(gz, na_yin, male=True):
-    year, month, day, hour = gz
-    mg, mz = month[0], month[1]
-    dg = day[0]
-    yz, dz = year[1], day[1]
+def shen_sha(pillars, na_yin):
+    """
+    pillars: [(宫位, 干, 支)] × 4
+    返回 {宫位: set(神煞名)}，同名规则合并。
+    """
+    (_, y_gan, y_zhi), (_, m_gan, m_zhi), (_, d_gan, d_zhi), (_, h_gan, h_zhi) = pillars
+    month = m_zhi
 
-    out = {i: [] for i in range(4)}
-    for i, p in enumerate(gz):
-        g, z = p[0], p[1]
-        found = []
+    hits = {}
 
-        if z in TAI_JI[year[0]] or z in TAI_JI[dg]:
-            found.append("太极贵人")
-        if z in TIAN_YI[dg]:
-            found.append("天乙贵人")
-        if TIAN_DE_GAN.get(mz) == g or TIAN_DE_ZHI.get(mz) == z:
-            found.append("天德贵人")
-        if YUE_DE.get(mz) == g:
-            found.append("月德贵人")
-        if g in DE_XIU.get(mz, ""):
-            found.append("德秀贵人")
-        if WEN_CHANG[dg] == z:
-            found.append("文昌")
-        if LU_SHEN[dg] == z:
-            found.append("禄神")
-        if i == 2 and p in YIN_CHA:
-            found.append("阴差阳错")
-        if i == 2 and p in LIU_XIU:
-            found.append("六秀日")
-        if i == 2 and p in GU_LUAN:
-            found.append("孤鸾煞")
-        if z in (shift(yz, 3), shift(yz, -3)):
-            found.append("勾绞煞")
-        if TIAN_XI[yz] == z:
-            found.append("天喜")
-        if z in (PEACH[yz], PEACH[dz]):
-            found.append("桃花")
-        if z in (HORSE[yz], HORSE[dz]):
-            found.append("驿马")
-        if z in (CANOPY[yz], CANOPY[dz]):
-            found.append("华盖")
-        if YANG_REN[dg] == z:
-            found.append("羊刃")
-        if z in TONG_ZI.get(na_yin, ""):
-            found.append("童子煞")
+    def add(name, positions):
+        if positions:
+            hits.setdefault(name, set()).update(positions)
 
-        found.sort(key=lambda n: ORDER.index(n))
-        out[i] = found
+    # 贵人五件：年干与日干并查（有的柱只能由年干取到，单看日干会漏）
+    for name, table in (("太极贵人", TAI_JI), ("天乙贵人", TIAN_YI),
+                        ("国印贵人", GUO_YIN), ("福星贵人", FU_XING),
+                        ("金舆", JIN_YU)):
+        targets = set(table.get(y_gan, "")) | set(table.get(d_gan, ""))
+        add(name, {p for p, _, z in pillars if z in targets})
 
-    void = void_branches(day)
-    for i, p in enumerate(gz):
-        if p[1] in void:
-            out[i].append("空亡")
+    # 天德 / 天德合
+    de = TIAN_DE[month]
+    add("天德贵人", {p for p, g, z in pillars if g == de or z == de})
+    he = GAN_HE.get(de) or ZHI_HE.get(de)
+    if he:
+        add("天德合", {p for p, g, z in pillars if g == he or z == he})
 
-    return out
+    # 月德 / 月德合
+    yd = YUE_DE[month]
+    add("月德贵人", {p for p, g, _ in pillars if g == yd})
+    yd_he = GAN_HE.get(yd)
+    if yd_he:
+        add("月德合", {p for p, g, _ in pillars if g == yd_he})
+
+    # 德秀
+    dex = set(DE_XIU[month])
+    add("德秀贵人", {p for p, g, _ in pillars if g in dex})
+
+    # 日干诸项
+    for name, table in (("文昌", WEN_CHANG), ("禄神", LU_SHEN),
+                        ("羊刃", YANG_REN), ("红艳煞", HONG_YAN)):
+        t = table[d_gan]
+        add(name, {p for p, _, z in pillars if z == t})
+
+    # 日柱干支组合
+    dgz = d_gan + d_zhi
+    if dgz in YIN_CHA:
+        add("阴差阳错", {"日"})
+    if dgz in LIU_XIU:
+        add("六秀日", {"日"})
+    if dgz in GU_LUAN:
+        add("孤鸾煞", {"日"})
+    if dgz in BA_ZHUAN:
+        add("八专日", {"日"})
+
+    # 年支诸项
+    add("天喜", {p for p, _, z in pillars if z == TIAN_XI[y_zhi]})
+    add("红鸾", {p for p, _, z in pillars if z == HONG_LUAN[y_zhi]})
+    add("孤辰", {p for p, _, z in pillars if z == GU_CHEN[y_zhi]})
+    add("寡宿", {p for p, _, z in pillars if z == GUA_SU[y_zhi]})
+
+    # 丧门：年支顺行二位
+    sang = shift(y_zhi, 2)
+    add("丧门", {p for p, _, z in pillars if z == sang})
+
+    # 勾绞：年支前后三辰
+    add("勾绞煞", {p for p, _, z in pillars if z in (shift(y_zhi, 3), shift(y_zhi, -3))})
+
+    # 三合局系：年支与日支并查，华盖排除基准宫位
+    for base_pos, base in (("年", y_zhi), ("日", d_zhi)):
+        idx = GROUP_OF[base]
+        add("桃花", {p for p, _, z in pillars if z == GROUP_PEACH[idx]})
+        add("驿马", {p for p, _, z in pillars if z == GROUP_HORSE[idx]})
+        add("亡神", {p for p, _, z in pillars if z == GROUP_WANG[idx]})
+        add("劫煞", {p for p, _, z in pillars if z == GROUP_JIE[idx]})
+        add("华盖", {p for p, _, z in pillars
+                     if z == GROUP_CANOPY[idx] and p != base_pos})
+
+    # 童子煞：纳音法与季节法并查
+    targets = set()
+    if na_yin in ("金", "木"):
+        targets |= set("午卯")
+    elif na_yin in ("水", "火"):
+        targets |= set("酉戌")
+    elif na_yin == "土":
+        targets |= set("辰巳")
+    targets |= set("寅子") if month in SEASON_SPRING_AUTUMN else set("卯未辰")
+    add("童子煞", {p for p, _, z in pillars if z in targets})
+
+    # 空亡
+    void = void_branches(dgz)
+    add("空亡", {p for p, _, z in pillars if z in void})
+
+    return hits
 
 
-# ------------------------------------------------------------------ 断言
+def compare(label, got, expected):
+    for pos in "年月日时":
+        g = got.get(pos, set())
+        e = set(expected.get(pos, []))
+        missing = e - g
+        extra = g - e
+        check(not missing, f"{label} {pos}柱 缺少：{'、'.join(sorted(missing))}")
+        check(not extra, f"{label} {pos}柱 多出：{'、'.join(sorted(extra))}")
 
-BASE = ["己卯", "甲戌", "丙午", "壬辰"]
-res = analyze(BASE, "土")
 
-EXPECT = {
-    0: ["太极贵人", "桃花", "空亡"],
-    1: ["太极贵人", "华盖"],
-    2: ["天德贵人", "月德贵人", "德秀贵人", "阴差阳错", "六秀日", "孤鸾煞", "勾绞煞", "天喜", "羊刃"],
-    3: ["太极贵人", "童子煞"],
+# ------------------------------------------------------------------ 样本
+
+CASE_A = {
+    "label": "构造盘一 丁酉 甲申 丙午 壬寅",
+    "pillars": [("年", "丁", "酉"), ("月", "甲", "申"),
+                ("日", "丙", "午"), ("时", "壬", "寅")],
+    "nayin": "火",
+    "expected": {
+        "年": ["天乙贵人", "太极贵人", "月德合", "童子煞"],
+        "月": ["亡神", "德秀贵人", "文昌", "金舆", "驿马"],
+        "日": ["六秀日", "勾绞煞", "孤鸾煞", "德秀贵人", "桃花",
+               "红鸾", "羊刃", "阴差阳错"],
+        "时": ["劫煞", "国印贵人", "德秀贵人", "月德贵人", "福星贵人",
+               "空亡", "童子煞", "红艳煞"],
+    },
 }
 
-NAMES = ["年柱", "月柱", "日柱", "时柱"]
-for i in range(4):
-    check(res[i] == EXPECT[i], "%s 应为 %s，实得 %s" % (NAMES[i], EXPECT[i], res[i]))
+CASE_B = {
+    "label": "构造盘二 乙巳 丁卯 庚申 壬辰",
+    "pillars": [("年", "乙", "巳"), ("月", "丁", "卯"),
+                ("日", "庚", "申"), ("时", "壬", "辰")],
+    "nayin": "火",
+    "expected": {
+        "年": ["劫煞", "天德合", "德秀贵人", "金舆"],
+        "月": ["德秀贵人", "福星贵人"],
+        "日": ["亡神", "八专日", "勾绞煞", "天乙贵人", "天德贵人", "孤辰", "禄神"],
+        "时": ["华盖", "国印贵人", "天喜", "寡宿", "德秀贵人"],
+    },
+}
 
-# 逐项复核几处最容易错的查法
-check(void_branches("丙午") == "寅卯", "丙午旬空应为寅卯")
-check(shift("卯", 3) == "午" and shift("卯", -3) == "子", "勾绞煞前后三辰应为午与子")
-check(TIAN_DE_GAN["戌"] == "丙", "戌月天德应为丙")
-check("丙" in DE_XIU["戌"], "戌月德秀应含丙")
-check(TIAN_XI["卯"] == "午", "卯年天喜应为午")
-check(TONG_ZI["土"] == "辰巳", "土命童子煞应为辰巳")
+CASE_C = {
+    "label": "构造盘三 丁巳 戊申 丙辰 癸未",
+    "pillars": [("年", "丁", "巳"), ("月", "戊", "申"),
+                ("日", "丙", "辰"), ("时", "癸", "未")],
+    "nayin": "土",
+    "expected": {
+        "年": ["劫煞", "月德合", "禄神", "童子煞"],
+        "月": ["亡神", "勾绞煞", "天德合", "孤辰", "德秀贵人", "文昌", "金舆"],
+        "日": ["天喜", "寡宿", "德秀贵人", "童子煞"],
+        "时": ["丧门", "天德贵人", "德秀贵人", "金舆"],
+    },
+}
 
-# 「将星」不应出现在任何一柱
-for i in range(4):
-    check("将星" not in res[i], "%s 不应有将星" % NAMES[i])
 
-# 源码侧：规则必须真的存在，且将星不再生成
-src = open(
-    os.path.join(ROOT, "core", "analysis", "src", "main", "kotlin", "com", "bazi", "analysis", "ShenSha.kt"),
-    encoding="utf-8",
-).read()
-code = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
-code = "\n".join(l.split("//")[0] for l in code.splitlines())
+def run_cases():
+    for case in (CASE_A, CASE_B, CASE_C):
+        got = shen_sha(case["pillars"], case["nayin"])
+        # shen_sha 返回 {神煞名: {宫位}}，比较时转置成 {宫位: {神煞名}}
+        by_pos = {}
+        for name, poses in got.items():
+            for p in poses:
+                by_pos.setdefault(p, set()).add(name)
+        compare(case["label"], by_pos, case["expected"])
 
-for rule in ["太极贵人", "天德贵人", "月德贵人", "德秀贵人", "阴差阳错",
-             "六秀日", "孤鸾煞", "勾绞煞", "天喜", "童子煞", "羊刃", "桃花", "华盖"]:
-    check('"%s"' % rule in code, "ShenSha.kt 已无该规则：%s" % rule)
 
-check('"将星"' not in code, "ShenSha.kt 不应再有将星规则")
-check("年干${input.yearGan.cn}、日干${dm.cn}并查" in src, "太极贵人应年干日干并查")
+def sorted_branches(text):
+    return set(text)
 
-print("神煞查法校验")
-for i in range(4):
-    print("  %s：%s" % (NAMES[i], "、".join(res[i])))
-print("共执行 %d 项断言" % passed)
-if failed:
-    print("失败 %d 项：" % len(failed))
-    for f in failed:
-        print("  -", f)
-    sys.exit(1)
-print("全部通过")
+
+def test_formulas():
+    """查法表对撞口诀。这部分是外部依据，与用什么盘无关。
+
+    天乙贵人：甲戊庚牛羊、乙己鼠猴乡、丙丁猪鸡位、壬癸兔蛇藏、六辛逢马虎。
+    """
+    check(sorted_branches(TIAN_YI["甲"]) == {"丑", "未"}, "天乙：甲见丑未")
+    check(sorted_branches(TIAN_YI["戊"]) == {"丑", "未"}, "天乙：戊见丑未")
+    check(sorted_branches(TIAN_YI["庚"]) == {"丑", "未"}, "天乙：庚见丑未")
+    check(sorted_branches(TIAN_YI["乙"]) == {"子", "申"}, "天乙：乙见子申")
+    check(sorted_branches(TIAN_YI["己"]) == {"子", "申"}, "天乙：己见子申")
+    check(sorted_branches(TIAN_YI["丙"]) == {"亥", "酉"}, "天乙：丙见亥酉")
+    check(sorted_branches(TIAN_YI["丁"]) == {"亥", "酉"}, "天乙：丁见亥酉")
+    check(sorted_branches(TIAN_YI["壬"]) == {"卯", "巳"}, "天乙：壬见卯巳")
+    check(sorted_branches(TIAN_YI["癸"]) == {"卯", "巳"}, "天乙：癸见卯巳")
+    check(sorted_branches(TIAN_YI["辛"]) == {"午", "寅"}, "天乙：辛见午寅")
+
+    # 太极贵人：甲乙子午、丙丁卯酉、戊己四季、庚辛寅亥、壬癸巳申
+    check(set(TAI_JI["甲"]) == {"子", "午"}, "太极：甲见子午")
+    check(set(TAI_JI["丙"]) == {"卯", "酉"}, "太极：丙见卯酉")
+    check(set(TAI_JI["戊"]) == {"辰", "戌", "丑", "未"}, "太极：戊见四季")
+    check(set(TAI_JI["庚"]) == {"寅", "亥"}, "太极：庚见寅亥")
+    check(set(TAI_JI["壬"]) == {"巳", "申"}, "太极：壬见巳申")
+
+    # 月德：寅午戌见丙、申子辰见壬、亥卯未见甲、巳酉丑见庚
+    for zhi in "寅午戌":
+        check(YUE_DE[zhi] == "丙", f"月德：{zhi}月见丙")
+    for zhi in "申子辰":
+        check(YUE_DE[zhi] == "壬", f"月德：{zhi}月见壬")
+    for zhi in "亥卯未":
+        check(YUE_DE[zhi] == "甲", f"月德：{zhi}月见甲")
+    for zhi in "巳酉丑":
+        check(YUE_DE[zhi] == "庚", f"月德：{zhi}月见庚")
+
+    # 天德：寅丁、卯申、辰壬、巳辛、午亥、未甲、申癸、酉寅、戌丙、亥乙、子巳、丑庚
+    expect_tiande = {"寅": "丁", "卯": "申", "辰": "壬", "巳": "辛", "午": "亥", "未": "甲",
+                     "申": "癸", "酉": "寅", "戌": "丙", "亥": "乙", "子": "巳", "丑": "庚"}
+    check(TIAN_DE == expect_tiande, "天德表与口诀不符")
+
+    # 桃花、驿马、华盖、亡神、劫煞按三合局
+    for zhi, idx in (("申", 0), ("寅", 1), ("巳", 2), ("亥", 3)):
+        check(GROUP_OF[zhi] == idx, f"三合局分组：{zhi}")
+    check(GROUP_PEACH == "酉卯午子", "桃花：申子辰酉、寅午戌卯、巳酉丑午、亥卯未子")
+    check(GROUP_HORSE == "寅申亥巳", "驿马：申子辰寅、寅午戌申、巳酉丑亥、亥卯未巳")
+    check(GROUP_CANOPY == "辰戌丑未", "华盖：申子辰辰、寅午戌戌、巳酉丑丑、亥卯未未")
+
+
+def test_tables():
+    """表本身的自洽性：六十甲子都能取到旬空，且空支不含本柱地支。"""
+    for i in range(60):
+        g, z = GAN[i % 10], ZHI[i % 12]
+        void = void_branches(g + z)
+        check(len(void) == 2, f"{g}{z} 旬空应两支，实得 {void}")
+        check(z not in void, f"{g}{z} 旬空不应含本柱地支")
+
+
+def strip_comments(src):
+    """先剥注释再扫：KDoc 里正写着这些词，不剥会把解释误判成实现。"""
+    out = []
+    in_block = False
+    for line in src.splitlines():
+        if in_block:
+            if "*/" in line:
+                in_block = False
+            continue
+        if line.strip().startswith("/*"):
+            if "*/" not in line:
+                in_block = True
+            continue
+        out.append(line.split("//")[0])
+    return "\n".join(out)
+
+
+def test_kotlin_source():
+    path = os.path.join(ROOT, "core", "analysis", "src", "main", "kotlin",
+                        "com", "bazi", "analysis", "ShenSha.kt")
+    raw = open(path, encoding="utf-8").read()
+    src = strip_comments(raw)
+
+    for name in ["太极贵人", "天乙贵人", "国印贵人", "福星贵人", "金舆",
+                 "天德贵人", "天德合", "月德贵人", "月德合", "德秀贵人",
+                 "红鸾", "孤辰", "寡宿", "天喜", "丧门", "亡神", "劫煞",
+                 "八专日", "红艳煞", "童子煞", "空亡"]:
+        check(f'"{name}"' in src, f"Kotlin 缺规则：{name}")
+
+    check("将星" not in src, "Kotlin 仍含将星（已确认误报，应删除）")
+    check("pos != basePos" in src, "华盖未排除基准宫位（会自指）")
+    check("GROUP_GU_CHEN" not in src, "孤辰寡宿仍走三合索引（应改三会方）")
+    check("bySeason" in src, "童子煞缺季节法")
+    check("GAN_HE" in src and "ZHI_HE" in src, "缺天德合/月德合所需的合化表")
+
+
+def main():
+    run_cases()
+    test_formulas()
+    test_tables()
+    test_kotlin_source()
+
+    print(f"共执行 {checks} 项断言")
+    if failures:
+        print(f"失败 {len(failures)} 项：")
+        for f in failures:
+            print("  x", f)
+        sys.exit(1)
+    print("三张构造盘逐柱精确对撞通过，合计覆盖 31 种神煞")
+    print("  构造盘一 丁酉 甲申 丙午 壬寅：4 + 5 + 8 + 8 = 25 项")
+    print("  构造盘二 乙巳 丁卯 庚申 壬辰：4 + 2 + 7 + 5 = 18 项")
+    print("  构造盘三 丁巳 戊申 丙辰 癸未：4 + 7 + 4 + 4 = 19 项")
+    print("全部通过")
+
+
+if __name__ == "__main__":
+    main()

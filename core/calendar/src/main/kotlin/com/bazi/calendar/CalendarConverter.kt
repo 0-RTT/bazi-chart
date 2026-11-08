@@ -127,10 +127,13 @@ object CalendarConverter {
             day = day.day,
             isLeapMonth = isLeap,
             text = buildString {
-                append(yearGanZhi).append('年')
+                // 公历年在前、干支年括注：农历年与公历年常常差一岁
+                // （公历 1 月出生仍属上一农历年），只写干支会让人以为排错了年。
+                append(day.year).append('年')
                 if (isLeap) append("闰")
                 append(LunarText.monthName(monthValue))
                 append(LunarText.dayName(day.day))
+                append("（").append(yearGanZhi).append("）")
             },
             yearGanZhi = yearGanZhi,
             zodiac = ZODIAC[((branchIndex % 12) + 12) % 12].toString()

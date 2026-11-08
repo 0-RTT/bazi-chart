@@ -69,7 +69,7 @@ fun InputScreen(state: UiState, viewModel: BaziViewModel) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
             title = "八字排盘",
-            subtitle = "子平法 · 真太阳时 · 全离线"
+            subtitle = "子平法 · 全离线"
         )
 
         Column(
@@ -253,7 +253,7 @@ private fun BirthPanel(state: UiState, viewModel: BaziViewModel) {
                 )
                 Text(
                     "${state.shiChen.cn}时 · ${state.shiChen.hourRange}" +
-                        (if (state.useTrueSolarTime) "　按真太阳时定时辰" else ""),
+                        if (state.useTrueSolarTime) "　已开真太阳时，时辰可能变动" else "　按钟表时定时辰",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -311,7 +311,7 @@ private fun PlacePanel(state: UiState, viewModel: BaziViewModel, onPickCity: () 
 
         ToggleLine(
             title = "真太阳时校正",
-            subtitle = "按经度差与均时差换算，时柱以此为准",
+            subtitle = "按经度差与均时差换算。贴着时辰边界出生时，开启会改变时柱",
             checked = state.useTrueSolarTime,
             onChange = viewModel::setTrueSolarTime
         )

@@ -125,4 +125,29 @@ class BaziCalculatorTest {
         assertEquals("午", withoutCorrection.hourPillar.zhi.cn)
         assertEquals("巳", withCorrection.hourPillar.zhi.cn)
     }
+
+    @Test
+    @DisplayName("默认不校正：贴着时辰边界出生也不改时辰")
+    fun defaultKeepsClockHour() {
+        // 07:00 北京。经度差约 −14.4 分、均时差约 −9 分，合计约 −23 分；
+        // 若默认开启校正会落到 06:37，时辰从辰退回卯，整盘错一个时辰。
+        // 这一条钉死 SectConfig.useTrueSolarTime 的默认值。
+        val chart = BaziCalculator.calculate(
+            BirthInput(
+                CalendarType.SOLAR, 2000, 3, 15, 7, 0,
+                Gender.MALE, beijing
+            )
+        )
+        assertEquals(DiZhi.CHEN, chart.hourPillar.zhi, "默认应按钟表时取辰时")
+
+        // 显式开启后确实会变——这正是默认值不能为 true 的原因。
+        val corrected = BaziCalculator.calculate(
+            BirthInput(
+                CalendarType.SOLAR, 2000, 3, 15, 7, 0,
+                Gender.MALE, beijing,
+                SectConfig(useTrueSolarTime = true)
+            )
+        )
+        assertEquals(DiZhi.MAO, corrected.hourPillar.zhi, "开启校正后应落到卯时")
+    }
 }

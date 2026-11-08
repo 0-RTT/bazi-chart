@@ -61,7 +61,7 @@ object AiPromptBuilder {
                 if (moment.correction.dstMinutes != 0) "、夏令时 −%d 分".format(moment.correction.dstMinutes) else ""
             )
         )
-        appendLine("- 农历：${moment.lunar.text}（${moment.lunar.yearGanZhi}年，属${moment.lunar.zodiac}）")
+        appendLine("- 农历：${moment.lunar.text}，属${moment.lunar.zodiac}")
         appendLine("- 出生地：${input.city.displayName}")
         appendLine(
             "- 节气：当令 ${moment.currentTerm.name}（${dateTime(moment.currentTerm.time)}）；" +

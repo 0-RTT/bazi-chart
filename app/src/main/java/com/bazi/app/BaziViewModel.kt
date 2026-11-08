@@ -52,7 +52,8 @@ data class UiState(
     val leapMonth: Boolean = false,
     val gender: Gender = Gender.MALE,
     val city: City = CityDatabase.default,
-    val useTrueSolarTime: Boolean = true,
+    /** 默认关闭：与通行排盘工具一致，按钟表时定时辰。 */
+    val useTrueSolarTime: Boolean = false,
     val ziHour: ZiHourSect = ZiHourSect.LATE,
     val result: ChartBundle? = null,
     /**
