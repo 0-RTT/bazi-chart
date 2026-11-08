@@ -155,6 +155,18 @@ for name in ("MonthSection", "MonthCell", "LuckDetailPanel", "StartLuckPanel", "
     check("fun " + name + "(" in fortune, "运程页缺少组件 %s" % name)
 check("monthliesOf" in fortune, "流月块未接引擎的 monthliesOf")
 
+# ------------------------------------------------------------ 四、三级下钻的联动
+
+# 流月跟的是「选中的那一年」。点大运时若不改这一年，流月就停在上一运的年份上，
+# 看起来正是「点大运，流月不动」。
+check(re.search(r"picked = index[\s\S]{0,600}?pickedYear =", fortune) is not None,
+      "点大运时未重置选中年份，流月会停在上一运")
+check("luckIndex == index" in fortune, "未按大运筛选流年区间")
+check("span.any { it.year == currentYear }" in fortune,
+      "换运时未优先落回本年，点「当运」那一格会跳离今年")
+check("if (picked != index)" in fortune,
+      "重复点同一格会把已选流年冲回运首")
+
 # ------------------------------------------------------------ 结果
 
 print("界面动效与等高校验")

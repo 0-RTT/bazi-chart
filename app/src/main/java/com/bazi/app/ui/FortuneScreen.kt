@@ -118,7 +118,22 @@ fun FortuneTab(bundle: ChartBundle) {
                         luck = luck,
                         selected = index == selectedIndex,
                         current = index == currentLuckIndex,
-                        onClick = { picked = index }
+                        onClick = {
+                            // 重复点同一格不动：否则会把用户刚选好的流年冲回运首。
+                            if (picked != index) {
+                                picked = index
+                                // 换了大运，流年口必须跟着换。
+                                // 流月跟的是「选中的那一年」，而原先选的年份往往不在这步运里；
+                                // 不重置的话流月会停在上一运的年份上——看起来就是
+                                // 「点大运，流月不动」。含今年就用今年，否则落到这步运首年。
+                                val span = chart.annuals.filter { it.luckIndex == index }
+                                pickedYear = when {
+                                    span.isEmpty() -> 0
+                                    span.any { it.year == currentYear } -> 0
+                                    else -> span.first().year
+                                }
+                            }
+                        }
                     )
                 }
             }
