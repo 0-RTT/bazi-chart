@@ -59,19 +59,38 @@ object Radii {
  * 动效口径。
  *
  * 只留三档，因为动效一多就互相打架：
- * - [state]　就地变化（选中、高亮、边框粗细）；比手指的反应稍慢一点，但不能慢过知觉
+ * - [state]　就地变化（选中、高亮、边框粗细、字色）；比手指的反应稍慢一点，但不能慢过知觉
  * - [swap]　内容整体替换（换大运、换流年、换流月）；只做交叉淡入，不做位移，
  *   因为这两块本身就在滚动容器里，再加位移会与惯性滚动抢注意力
- * - [page]　页面级迁移（页签切换、进出命盘）
+ * - [page]　页面级迁移（页签换页、进出命盘）；260ms，比就地变化长一档，
+ *   因为跨屏移动的位移距离大，太快会看不清中间经过的是什么
+ * - [reveal]　只改绘制的变化（透明度、缩放、指示条）
  *
  * 缓动统一用 [FastOutSlowInEasing]：起步快，动作在按下的一瞬间就有回应；
  * 收尾慢，停下来的位置才看得清。线性或 EaseIn 在触屏上都会显得「黏」。
  */
 internal object Motion {
-    val state = tween<Color>(durationMillis = 220, easing = FastOutSlowInEasing)
-    val thickness = tween<Dp>(durationMillis = 220, easing = FastOutSlowInEasing)
-    val swap = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
-    val page = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
+    /** 就地变化：选中、高亮、边框粗细、字色。 */
+    const val stateMillis = 220
+
+    /** 内容整体替换：换大运、换流年、换流月。 */
+    const val swapMillis = 180
+
+    /** 页面级迁移：页签换页、进出命盘。 */
+    const val pageMillis = 260
+
+    val state = tween<Color>(durationMillis = stateMillis, easing = FastOutSlowInEasing)
+    val thickness = tween<Dp>(durationMillis = stateMillis, easing = FastOutSlowInEasing)
+    val swap = tween<Float>(durationMillis = swapMillis, easing = FastOutSlowInEasing)
+    val page = tween<Float>(durationMillis = pageMillis, easing = FastOutSlowInEasing)
+
+    /**
+     * 只改绘制、不改布局的变化（透明度、缩放、指示条长度）。
+     *
+     * 与 [state] 分开是因为这两类事对时长的手感不同：翻色可以稍慢，
+     * 缩放与小位移一慢就显得拖；220ms 是「按下去有回应、但不抢注意力」的位置。
+     */
+    val reveal = tween<Float>(durationMillis = stateMillis, easing = FastOutSlowInEasing)
 }
 
 @Composable

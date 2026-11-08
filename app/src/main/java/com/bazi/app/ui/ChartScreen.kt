@@ -1,8 +1,11 @@
 package com.bazi.app.ui
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,19 +22,21 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,6 +50,7 @@ import com.bazi.engine.BaziChart
 import com.bazi.engine.Pillar
 import com.bazi.engine.PillarPosition
 import com.bazi.engine.WuXing
+import kotlinx.coroutines.launch
 
 /** 行标宽度。够放「藏干」「神煞」两字，又不挤占四柱的横向空间。 */
 private val RAIL_WIDTH = 52.dp
@@ -63,11 +69,15 @@ private val RAIL_WIDTH = 52.dp
  */
 @Composable
 fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
     val chart = bundle.chart
     // 断语页已下线：规则模板给出的判断站不住，与其给一份不准确的解读，
     // 不如只留可逐格核对的盘面与运程，解读交给使用者自己或外部模型。
     val tabs = listOf("命盘", "运程", "AI")
+    val pager = rememberPagerState(pageCount = { tabs.size })
+    val scope = rememberCoroutineScope()
+    val goTab: (Int) -> Unit = { index ->
+        scope.launch { pager.animateScrollToPage(index, animationSpec = Motion.page) }
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
@@ -80,26 +90,104 @@ fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
             onBack = onBack
         )
 
-        Segmented(
-            options = tabs,
-            selectedIndex = tab,
-            onSelect = { tab = it },
+        // 三页并排交给 Pager，而不是「一帧换掉」或「交叉淡入」：
+        // - 一帧换掉：视线要重新找落点，切换像闪了一下
+        // - 交叉淡入：两页都是长列表，淡入淡出期间能同时看到两份错位的文字，
+        //   这才是「动画效果很奇怪」的真正来源
+        // Pager 的位移由手指直接驱动，跟手、可中途反悔，高刷屏上按帧插值，
+        // 不存在两个内容混在一起的那一帧。
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.weight(1f),
+            // 预组合左右各一页：否则第一次向左滑时，目标页要等手指已经动了才开始
+            // 组合与测量，第一帧就是掉帧。三页都不重，多备一页的代价小于掉帧。
+            beyondViewportPageCount = 1
+        ) { page ->
+            when (page) {
+                0 -> ChartTab(bundle) { goTab(2) }
+                1 -> FortuneTab(bundle)
+                else -> AiPromptTab(bundle)
+            }
+        }
+
+        BottomTabs(tabs = tabs, selected = pager.currentPage, onSelect = goTab)
+    }
+}
+
+/**
+ * 底部页签。
+ *
+ * 三个页签是「同一份数据的三种看法」，属于平级切换而不是「进入下一层」，
+ * 放在拇指自然落点比放在标题下方少一次伸手；顶部 56dp 留给盘名与返回。
+ *
+ * 选中态用两道冗余编码：字色 + 上方一道短杠。只靠字色，强光下或色觉有差异时会糊。
+ * 短杠的透明度与横向缩放都走 graphicsLayer——只改绘制层，不触发重排，
+ * 每帧代价就是两次变换矩阵。
+ */
+@Composable
+private fun BottomTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-        )
-
-        // 用 weight 精确给出剩余高度：否则可滚动内容会按整屏高度测量，
-        // 末尾几十 dp 滚不到底。
-        Box(Modifier.weight(1f).navigationBarsPadding()) {
-            // 页签切成交叉淡入：原来是一帧之间整屏换掉，视线要重新找落点。
-            // 只做透明度的原因——命盘与运程都是长列表，加位移会和列表自身的
-            // 惯性滚动打架，看起来像两次运动。
-            Crossfade(targetState = tab, animationSpec = Motion.page, label = "tabSwitch") { index ->
-                when (index) {
-                    0 -> ChartTab(bundle) { tab = 2 }
-                    1 -> FortuneTab(bundle)
-                    else -> AiPromptTab(bundle)
+                .background(MaterialTheme.colorScheme.surface)
+                .navigationBarsPadding()
+                .height(54.dp)
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEachIndexed { index, label ->
+                val on = index == selected
+                val fg by animateColorAsState(
+                    targetValue = if (on) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    animationSpec = Motion.state,
+                    label = "tabFg"
+                )
+                val mark by animateFloatAsState(
+                    targetValue = if (on) 1f else 0f,
+                    animationSpec = Motion.reveal,
+                    label = "tabMark"
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        // 去掉涟漪：整块 54dp 高的涟漪会把这一栏的重量感放得太大，
+                        // 短杠与字色的过渡已经把「点到了」说清楚了。
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { if (!on) onSelect(index) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        Modifier
+                            .width(18.dp)
+                            .height(2.dp)
+                            .graphicsLayer {
+                                alpha = mark
+                                scaleX = mark
+                            }
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(Modifier.height(7.dp))
+                    Text(
+                        label,
+                        fontSize = 13.sp,
+                        fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+                        color = fg,
+                        maxLines = 1
+                    )
                 }
             }
         }

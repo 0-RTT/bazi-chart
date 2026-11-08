@@ -236,7 +236,8 @@ private fun MonthSection(chart: BaziChart, year: Int, currentYear: Int) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "月建以节为界，寅月自立春起算，丑月止于次年立春。",
+                    "月建以节为界：寅月自立春起算，丑月止于次年立春。" +
+                        "格内日期为该节交节当天，逐年会有 0–1 天的漂移。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -285,8 +286,16 @@ private fun MonthCell(m: MonthlyFortune, modifier: Modifier = Modifier) {
             GanZhiPair(m.gan, m.zhi, fontSize = 15.sp)
         }
         Spacer(Modifier.height(2.dp))
+        // 节名与交节日是同一件事的两面，必须一起给：
+        // 只写「2/4」，十年一步的大运切过去几乎不变（十年内该节日的月日多数只差 0–1 天），
+        // 会让人以为数据没跟着年份走。写上节名，才读得出「哪一天交哪个节」。
         Text(
-            m.ganTenGod.cn + "　" + m.startTime.monthValue + "/" + m.startTime.dayOfMonth,
+            "${m.jieName} ${m.startTime.monthValue}/${m.startTime.dayOfMonth}",
+            fontSize = 9.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            m.ganTenGod.cn,
             fontSize = 9.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

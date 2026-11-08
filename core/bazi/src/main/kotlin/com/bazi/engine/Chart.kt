@@ -102,6 +102,14 @@ data class MonthlyFortune(
     val index: Int,
     /** 正月、二月……腊月。 */
     val monthName: String,
+    /**
+     * 本节节名：立春、惊蛰……小寒。
+     *
+     * 月建的依据。与 [startTime] 同源——节气时刻每一年的月日几乎不变
+     * （十年一步内多数只差 0–1 天），单看「2/4」会觉得数据没有跟着年份走；
+     * 把节名一并显示，才看得出「哪一天交哪个节」。
+     */
+    val jieName: String,
     val gan: TianGan,
     val zhi: DiZhi,
     val ganZhi: String,

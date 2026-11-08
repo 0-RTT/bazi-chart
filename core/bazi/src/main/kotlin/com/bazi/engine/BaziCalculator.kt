@@ -186,6 +186,7 @@ object BaziCalculator {
             MonthlyFortune(
                 index = i,
                 monthName = MONTH_NAMES[i],
+                jieName = SolarTerms.JIE_NAMES[i],
                 gan = gan,
                 zhi = zhi,
                 ganZhi = gan.cn + zhi.cn,

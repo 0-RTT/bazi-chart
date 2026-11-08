@@ -98,17 +98,26 @@ check(len(re.findall(r"\.width\((\d+)\.dp\)", chip)) == 0,
 # 口径只允许在 Components.kt 的 Motion 里定义
 check("internal object Motion" in components, "缺少统一的动效口径 Motion")
 check("FastOutSlowInEasing" in components, "Motion 未统一使用 FastOutSlowInEasing")
-for key, ms in (("state", 220), ("swap", 180), ("page", 200)):
-    pat = r"%s\s*=\s*tween<[A-Za-z]+>\(\s*durationMillis\s*=\s*%d" % (key, ms)
-    check(re.search(pat, components) is not None,
-          "Motion.%s 应为 %dms 的 tween" % (key, ms))
-check(re.search(r"thickness\s*=\s*tween<Dp>", components) is not None,
+for key, ms in (("stateMillis", 220), ("swapMillis", 180), ("pageMillis", 260)):
+    check(("const val %s = %d" % (key, ms)) in components,
+          "Motion.%s 应为 %d" % (key, ms))
+for line in ("val state = tween<Color>(durationMillis = stateMillis",
+             "val swap = tween<Float>(durationMillis = swapMillis",
+             "val page = tween<Float>(durationMillis = pageMillis",
+             "val reveal = tween<Float>(durationMillis = stateMillis"):
+    check(line in components, "Motion 缺规格：" + line)
+check("tween<Dp>(durationMillis = stateMillis" in components,
       "Motion 缺 Dp 过渡（边框粗细用）")
 
 # 各处引用口径，而不是各写 tween(...)
-for name, src in (("FortuneScreen", fortune), ("ChartScreen", chart),
-                  ("MainActivity", main)):
+for name, src in (("FortuneScreen", fortune), ("ChartScreen", chart)):
     check("tween" not in src, "%s 里硬编码了 tween，应改用 Motion 口径" % name)
+# 路由的横向位移必须用 IntOffset 的 spec，只能按时长常量重建——
+# 但重建时不许写死数字。
+check("tween<IntOffset>(Motion.pageMillis)" in main,
+      "路由位移应按 Motion.pageMillis 重建 spec")
+check(re.search(r"tween<IntOffset>\(\s*\d+", main) is None,
+      "路由位移里写死了时长，应取 Motion.pageMillis")
 check(fortune.count("Motion.state") >= 4, "运程页的选中态过渡未统一走 Motion.state")
 check(fortune.count("Motion.thickness") >= 2, "运程页的边框粗细过渡未统一走 Motion.thickness")
 
@@ -133,11 +142,28 @@ check("snapshotFlow" in fortune,
       "大运带的居中未等待首次布局，首帧 scroll 会被静默丢弃")
 check("state = luckRow" in fortune, "LazyRow 未接上滚动状态")
 
-# 页签与路由
-check("Crossfade(targetState = tab" in chart, "页签切换没有过渡")
-check("Motion.page" in chart, "页签切换未使用页面级口径")
-check("Crossfade(targetState = onChart" in main, "进出命盘没有过渡")
-check("Motion.page" in main, "进出命盘未使用页面级口径")
+# 页签：三页并排交给 Pager，不许再用「淡入淡出」——
+# 两页都是长列表，交叉期间同一帧里能看到两份错位的文字，这就是「动画很怪」的来源。
+check("rememberPagerState" in chart, "页签未改用 Pager")
+check("HorizontalPager(" in chart, "缺少 HorizontalPager")
+check("beyondViewportPageCount = 1" in chart,
+      "未预组合相邻页，首次横滑的第一帧会掉帧")
+check("animateScrollToPage" in chart, "点击页签未走 Pager 滚动")
+check("Motion.page" in chart, "点击页签未使用页面级口径")
+check("Crossfade(" not in chart, "页签仍在用交叉淡入（两页会叠影）")
+
+# 底部页签
+check("BottomTabs(" in chart, "缺少底部页签栏")
+check("navigationBarsPadding" in chart, "底部栏未让出手势导航条")
+check("pager.currentPage" in chart, "底部栏未与 Pager 同步")
+check("graphicsLayer" in chart, "页签指示条未走绘制层（会触发重排）")
+check("indication = null" in chart, "页签仍有涟漪，54dp 高的水波过重")
+
+# 路由
+check("AnimatedContent(" in main, "进出命盘未用 AnimatedContent")
+check("slideInHorizontally" in main, "进出命盘缺少横向位移，两版式会叠成重影")
+check("togetherWith" in main, "路由缺少 transitionSpec")
+check("Crossfade" not in main, "进出命盘仍在用交叉淡入")
 
 # 分段选择器
 seg = body(components, "Segmented")
@@ -167,12 +193,27 @@ check("span.any { it.year == currentYear }" in fortune,
 check("if (picked != index)" in fortune,
       "重复点同一格会把已选流年冲回运首")
 
+# ------------------------------------------------------------ 五、流月交节
+
+# 流月格上只写「2/4」，切十年一步的大运时几乎不变（该节日的月日多数只差 0–1 天），
+# 会被误读成「数据没跟着年份走」。节名与日期必须一起出现。
+chart_model = strip_comments(
+    read("core", "bazi", "src", "main", "kotlin", "com", "bazi", "engine", "Chart.kt"))
+calc = strip_comments(
+    read("core", "bazi", "src", "main", "kotlin", "com", "bazi", "engine", "BaziCalculator.kt"))
+check("val jieName: String" in chart_model, "MonthlyFortune 缺 jieName")
+check("jieName = SolarTerms.JIE_NAMES[i]" in calc, "jieName 未接十二节表")
+check("m.jieName" in fortune, "流月格未显示节名，日期会被误读成固定值")
+check("m.startTime.monthValue" in fortune, "流月格未显示交节月日")
+
 # ------------------------------------------------------------ 结果
 
 print("界面动效与等高校验")
-print("  大运格：定宽 %s、底注行定高，十格等高" % "CHIP_WIDTH")
-print("  动效三档：state 220ms / swap 180ms / page 200ms，统一 FastOutSlowInEasing")
-print("  交叉淡入：大运详情、流年、流月各一处；页签与路由各一处")
+print("  大运格：定宽 CHIP_WIDTH、底注行定高，十格等高")
+print("  动效四档：state/reveal 220ms、swap 180ms、page 260ms，统一 FastOutSlowInEasing")
+print("  页签：HorizontalPager 三页并排 + 底部页签栏；路由：淡入 + 横向位移")
+print("  交叉淡入：大运详情、流年、流月各一处")
+print("  流月：节名与交节日同显（只写日期会被误读成固定值）")
 print("共执行 %d 项断言" % passed)
 if failed:
     print("失败 %d 项：" % len(failed))

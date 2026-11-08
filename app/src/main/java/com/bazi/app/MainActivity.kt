@@ -4,13 +4,20 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bazi.app.ui.BaziTheme
@@ -44,8 +51,10 @@ class MainActivity : ComponentActivity() {
  * 路由完全由 ViewModel 的 [UiState.showResult] 决定，不在 Composable 里用
  * LaunchedEffect 监听取值——那套写法依赖对象相等性，重复排同一生辰时会失效。
  *
- * 进出命盘做一次 200ms 的交叉淡入：录入页与命盘页是两种完全不同的版式
- * （表单 vs 表格），硬切会让人分不清「排盘成功了」还是「页面闪了一下」。
+ * 进出命盘用「淡入 + 轻微横向位移」，而不是交叉淡入：
+ * 录入页与命盘页是两种完全不同的版式（表单 vs 表格），纯交叉淡入会让两份
+ * 内容在同一帧里叠着，看着像重影。加一点同向位移，眼睛读到的是「翻过去了一页」，
+ * 而不是「两张纸透在了一起」。位移只取屏宽的 1/14，避免与列表自身滚动混淆。
  */
 @Composable
 fun BaziApp(viewModel: BaziViewModel = viewModel()) {
@@ -53,7 +62,17 @@ fun BaziApp(viewModel: BaziViewModel = viewModel()) {
     val bundle = state.result
     val onChart = state.showResult && bundle != null
 
-    Crossfade(targetState = onChart, animationSpec = Motion.page, label = "route") { show ->
+    AnimatedContent(
+        targetState = onChart,
+        transitionSpec = {
+            // 位移用 slideInHorizontally 的 animationSpec（类型是 IntOffset），
+            // 不能直接复用 Motion.page（Float），所以按时长取值重建。
+            val slide = tween<IntOffset>(Motion.pageMillis)
+            (fadeIn(Motion.page) + slideInHorizontally(slide) { it / 14 })
+                .togetherWith(fadeOut(Motion.page) + slideOutHorizontally(slide) { -it / 14 })
+        },
+        label = "route"
+    ) { show ->
         if (show && bundle != null) {
             ChartScreen(bundle = bundle, onBack = viewModel::closeResult)
         } else {
