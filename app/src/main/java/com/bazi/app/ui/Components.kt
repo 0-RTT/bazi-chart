@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDateTime
@@ -288,6 +289,50 @@ fun Tag(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant)
 @Composable
 fun ElementTag(wx: com.bazi.engine.WuXing) {
     Tag(wx.cn, elementColor(wx))
+}
+
+/**
+ * 干支两字各按本字五行上色。
+ *
+ * 把「庚午」整串染成金色是错的读法：庚属金、午属火，两字分色才能一眼看出
+ * 这一步运是「金坐火」。大运、流年、流月三处都用这个件，色彩口径保持一致。
+ *
+ * @param showElement 是否在右下角附五行小字。空间紧张处（流年格子）关掉。
+ */
+@Composable
+fun GanZhiPair(
+    gan: com.bazi.engine.TianGan,
+    zhi: com.bazi.engine.DiZhi,
+    fontSize: TextUnit,
+    modifier: Modifier = Modifier,
+    showElement: Boolean = false
+) {
+    Row(modifier, verticalAlignment = Alignment.Bottom) {
+        Text(
+            gan.cn,
+            fontFamily = FontFamily.Serif,
+            fontSize = fontSize,
+            fontWeight = FontWeight.Medium,
+            color = elementColor(gan.wuXing)
+        )
+        Text(
+            zhi.cn,
+            fontFamily = FontFamily.Serif,
+            fontSize = fontSize,
+            fontWeight = FontWeight.Medium,
+            color = elementColor(zhi.wuXing)
+        )
+        if (showElement) {
+            Text(
+                gan.wuXing.cn + zhi.wuXing.cn,
+                fontFamily = FontFamily.Serif,
+                fontSize = 11.sp,
+                lineHeight = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 3.dp, bottom = 2.dp)
+            )
+        }
+    }
 }
 
 internal fun format(time: LocalDateTime): String =

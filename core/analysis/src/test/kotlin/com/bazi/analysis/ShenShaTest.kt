@@ -13,17 +13,20 @@ import org.junit.jupiter.api.Test
 /**
  * 神煞查法回归。
  *
- * 三张**构造盘**（合法干支组合，非真实命例，不含任何出生时间或地点），
+ * 五张**构造盘**（合法干支组合，非真实命例，不含任何出生时间或地点），
  * 逐柱集合必须**完全相等**：
  *
- * 构造盘一 丁酉 甲申 丙午 壬寅 4 / 5 / 8 / 8
- * 构造盘二 乙巳 丁卯 庚申 壬辰 4 / 2 / 7 / 5
- * 构造盘三 丁巳 戊申 丙辰 癸未 4 / 7 / 4 / 4
+ * 构造盘一 丁酉 甲申 丙午 壬寅 4 / 5 / 8 / 9
+ * 构造盘二 乙巳 丁卯 庚申 壬辰 5 / 2 / 7 / 5
+ * 构造盘三 丁巳 戊申 丙辰 癸未 4 / 8 / 4 / 5
+ * 构造盘四 癸卯 甲寅 甲辰 乙丑 6 / 7 / 2 / 5
+ * 构造盘五 甲寅 丙寅 戊寅 甲寅 2 / 4 / 5 / 2
  *
  * 为什么要多张：单张盘只能证明「查得到」，不能证明「不乱查」。
  * 很多查法（天乙、国印、金舆、福星、亡神、红艳）是「年干还是日干」
  * 「年支还是日支」的取舍，一个样本里两种口径往往同时成立，
- * 只有换一张盘才看得出哪一种是错的。三张合起来覆盖全部 31 种神煞。
+ * 只有换一张盘才看得出哪一种是错的。五张合起来覆盖全部 38 种神煞。
+ * 后两张专为日柱专有项而设：金神、十恶大败、天赦在一、二、三号盘上都不会出现。
  */
 @DisplayName("神煞：查法与宫位")
 class ShenShaTest {
@@ -61,6 +64,28 @@ class ShenShaTest {
         voidBranches = listOf(DiZhi.ZI, DiZhi.CHOU)
     )
 
+    /** 构造盘四：癸卯 甲寅 甲辰 乙丑。日柱甲辰为十恶大败，时柱乙丑为金神。 */
+    private fun caseD() = ShenShaInput(
+        yearGan = TianGan.GUI, yearZhi = DiZhi.MAO,
+        monthGan = TianGan.JIA, monthZhi = DiZhi.YIN,
+        dayGan = TianGan.JIA, dayZhi = DiZhi.CHEN,
+        hourGan = TianGan.YI, hourZhi = DiZhi.CHOU,
+        yearNaYin = WuXing.JIN,
+        male = true,
+        voidBranches = listOf(DiZhi.YIN, DiZhi.MAO)
+    )
+
+    /** 构造盘五：甲寅 丙寅 戊寅 甲寅。春月戊寅日，天赦；四支皆寅，将星不取自身。 */
+    private fun caseE() = ShenShaInput(
+        yearGan = TianGan.JIA, yearZhi = DiZhi.YIN,
+        monthGan = TianGan.BING, monthZhi = DiZhi.YIN,
+        dayGan = TianGan.WU, dayZhi = DiZhi.YIN,
+        hourGan = TianGan.JIA, hourZhi = DiZhi.YIN,
+        yearNaYin = WuXing.SHUI,
+        male = true,
+        voidBranches = listOf(DiZhi.SHEN, DiZhi.YOU)
+    )
+
     private fun byPosition(input: ShenShaInput): Map<PillarPosition, Set<String>> {
         val hits = ShenShaAnalyzer.analyze(input)
         return PillarPosition.entries.associateWith { pos ->
@@ -95,7 +120,7 @@ class ShenShaTest {
             ),
             hour = setOf(
                 "劫煞", "国印贵人", "德秀贵人", "月德贵人",
-                "福星贵人", "空亡", "童子煞", "红艳煞"
+                "福星贵人", "空亡", "童子煞", "红艳煞", "学堂"
             )
         )
     }
@@ -105,7 +130,7 @@ class ShenShaTest {
     fun caseTwo() {
         assertPillars(
             caseB(),
-            year = setOf("劫煞", "天德合", "德秀贵人", "金舆"),
+            year = setOf("劫煞", "天德合", "德秀贵人", "词馆", "金舆"),
             month = setOf("德秀贵人", "福星贵人"),
             day = setOf(
                 "亡神", "八专日", "勾绞煞", "天乙贵人",
@@ -121,9 +146,39 @@ class ShenShaTest {
         assertPillars(
             caseC(),
             year = setOf("劫煞", "月德合", "禄神", "童子煞"),
-            month = setOf("亡神", "勾绞煞", "天德合", "孤辰", "德秀贵人", "文昌", "金舆"),
+            month = setOf(
+                "亡神", "勾绞煞", "天德合", "孤辰",
+                "学堂", "德秀贵人", "文昌", "金舆"
+            ),
             day = setOf("天喜", "寡宿", "德秀贵人", "童子煞"),
-            hour = setOf("丧门", "天德贵人", "德秀贵人", "金舆")
+            hour = setOf("丧门", "天医", "天德贵人", "德秀贵人", "金舆")
+        )
+    }
+
+    @Test
+    @DisplayName("构造盘四：癸卯 甲寅 甲辰 乙丑，十恶大败与金神各归其位")
+    fun caseFour() {
+        assertPillars(
+            caseD(),
+            year = setOf("天乙贵人", "德秀贵人", "福星贵人", "空亡", "童子煞", "羊刃"),
+            month = setOf(
+                "亡神", "禄神", "福星贵人", "空亡",
+                "童子煞", "金舆", "驿马"
+            ),
+            day = setOf("十恶大败", "金舆"),
+            hour = setOf("天乙贵人", "天医", "寡宿", "福星贵人", "金神")
+        )
+    }
+
+    @Test
+    @DisplayName("构造盘五：甲寅 丙寅 戊寅 甲寅，天赦只论日柱")
+    fun caseFive() {
+        assertPillars(
+            caseE(),
+            year = setOf("福星贵人", "童子煞"),
+            month = setOf("德秀贵人", "月德贵人", "福星贵人", "童子煞"),
+            day = setOf("天赦", "德秀贵人", "福星贵人", "童子煞", "阴差阳错"),
+            hour = setOf("福星贵人", "童子煞")
         )
     }
 
@@ -145,12 +200,32 @@ class ShenShaTest {
     }
 
     @Test
-    @DisplayName("将星不再生成——三合局中神恒中本支，只会制造噪声")
-    fun noJiangXing() {
-        val names = byPosition(caseA()).values.flatten() +
-            byPosition(caseB()).values.flatten() +
-            byPosition(caseC()).values.flatten()
-        assertFalse("将星" in names, "不应出现将星，实得 $names")
+    @DisplayName("将星排除基准宫位：三合中神不自指，别柱见之才算")
+    fun jiangXingNotSelf() {
+        // 构造盘一：年支酉、日支午皆为中神，若不自排则两柱各自见自己，
+        // 正是旧实现被判定为「噪声」的原因；排除后本盘无将星。
+        val a = byPosition(caseA()).values.flatten()
+        assertFalse("将星" in a, "构造盘一不应出现将星，实得 $a")
+
+        // 构造盘五四支皆寅：将星为午，本盘不见午，故仍无将星。
+        val e = byPosition(caseE()).values.flatten()
+        assertFalse("将星" in e, "构造盘五不应出现将星，实得 $e")
+
+        // 反过来也要验：中神落在**别的**宫位时必须列出来。
+        // 己卯 甲戌 乙亥 丙子——日支亥属亥卯未，将星为卯，正落年支，
+        // 此处的年柱不是基准宫位，故这条将星要成立且只落在年柱。
+        val cross = ShenShaInput(
+            yearGan = TianGan.JI, yearZhi = DiZhi.MAO,
+            monthGan = TianGan.JIA, monthZhi = DiZhi.XU,
+            dayGan = TianGan.YI, dayZhi = DiZhi.HAI,
+            hourGan = TianGan.BING, hourZhi = DiZhi.ZI,
+            yearNaYin = WuXing.TU,
+            male = true,
+            voidBranches = listOf(DiZhi.YIN, DiZhi.MAO)
+        )
+        val positions = ShenShaAnalyzer.analyze(cross)
+            .firstOrNull { it.name == "将星" }?.positions.orEmpty()
+        assertEquals(listOf(PillarPosition.YEAR), positions, "日支取将星应落年柱")
     }
 
     @Test

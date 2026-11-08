@@ -1,6 +1,5 @@
 package com.bazi.app.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -299,86 +296,37 @@ private fun PlateRow(
     }
 }
 
-/** 干支大字 + 五行记号。记号是形状而非文字，扫一眼即知五行，不必读字。 */
+/**
+ * 干支大字 + 五行小字。
+ *
+ * 小字用「木火土金水」本字，与干支同色，排在右下角，整体读作「甲木」「午火」。
+ * 先前这里画的是树、焰、山、菱、滴五种抽象轮廓，形状之间没有共同语言——
+ * 不认字就看不懂，认字也得先记住五种图形。换成字之后，五行既是颜色也是文字，
+ * 两种线索冗余表达同一个信息，扫视与细读都成立。
+ *
+ * 小字参与行宽但整体居中，故大字会左移约小字宽度的一半；在 30sp 的字号下
+ * 这点偏移不到一个字宽的六分之一，肉眼几乎不可察，换来的是「甲木」二字的紧邻关系。
+ */
 @Composable
 private fun GanZhiCell(text: String, wx: WuXing) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val color = elementColor(wx)
+    Row(verticalAlignment = Alignment.Bottom) {
         Text(
             text,
             fontFamily = FontFamily.Serif,
             fontSize = 30.sp,
             fontWeight = FontWeight.Medium,
-            color = elementColor(wx)
+            color = color
         )
-        Spacer(Modifier.width(3.dp))
-        ElementGlyph(wx)
-    }
-}
-
-/**
- * 五行记号。
- *
- * 用纯多边形拼出木（树）、火（焰）、土（山）、金（菱）、水（滴）五种轮廓，
- * 只用 moveTo/lineTo，不依赖贝塞尔曲线接口——Compose 1.6 与 1.7 之间
- * 曲线方法的命名改过，多边形在 11dp 这个尺寸下已经够辨认，也更稳。
- */
-@Composable
-private fun ElementGlyph(wx: WuXing, glyphSize: Dp = 11.dp) {
-    val color = elementColor(wx)
-    Canvas(Modifier.size(glyphSize)) {
-        val s = size.minDimension
-        val rise = Path()
-        when (wx) {
-            WuXing.MU -> {
-                // 树干
-                rise.moveTo(0.42f * s, 0.34f * s)
-                rise.lineTo(0.58f * s, 0.34f * s)
-                rise.lineTo(0.58f * s, s)
-                rise.lineTo(0.42f * s, s)
-                rise.close()
-                // 树冠
-                rise.moveTo(0.50f * s, 0f)
-                rise.lineTo(s, 0.68f * s)
-                rise.lineTo(0f, 0.68f * s)
-                rise.close()
-            }
-
-            WuXing.HUO -> {
-                rise.moveTo(0.50f * s, 0f)
-                rise.lineTo(0.90f * s, 0.56f * s)
-                rise.lineTo(0.80f * s, 0.86f * s)
-                rise.lineTo(0.50f * s, s)
-                rise.lineTo(0.20f * s, 0.86f * s)
-                rise.lineTo(0.10f * s, 0.56f * s)
-                rise.close()
-            }
-
-            WuXing.TU -> {
-                rise.moveTo(0.50f * s, 0.06f * s)
-                rise.lineTo(s, s)
-                rise.lineTo(0f, s)
-                rise.close()
-            }
-
-            WuXing.JIN -> {
-                rise.moveTo(0.50f * s, 0f)
-                rise.lineTo(s, 0.50f * s)
-                rise.lineTo(0.50f * s, s)
-                rise.lineTo(0f, 0.50f * s)
-                rise.close()
-            }
-
-            WuXing.SHUI -> {
-                rise.moveTo(0.50f * s, 0f)
-                rise.lineTo(0.86f * s, 0.62f * s)
-                rise.lineTo(0.72f * s, 0.92f * s)
-                rise.lineTo(0.50f * s, s)
-                rise.lineTo(0.28f * s, 0.92f * s)
-                rise.lineTo(0.14f * s, 0.62f * s)
-                rise.close()
-            }
-        }
-        drawPath(rise, color)
+        Text(
+            wx.cn,
+            fontFamily = FontFamily.Serif,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 12.sp,
+            color = color,
+            modifier = Modifier.padding(start = 3.dp, bottom = 3.dp)
+        )
     }
 }
 

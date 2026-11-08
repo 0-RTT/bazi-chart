@@ -103,6 +103,13 @@ private fun DiZhi.shift(n: Int): DiZhi = DiZhi.entries[((index + n) % 12 + 12) %
  *    通行工具并不列，故收窄为单查日干。
  * 4. **华盖要排除基准宫位**。四库之支属某三合局时，华盖正是它自己
  *    （亥卯未见未、申子辰见辰）；若不排除，该柱会「自己见自己」凭空多一项。
+ * 5. **将星同理排除基准宫位**。三合中神（子午卯酉）常在本命某一柱上，
+ *    不排除则「年支取年支」恒中两柱，噪声大于信息，通行工具亦不列。
+ *    排除后仍可别柱相取：日支亥属亥卯未、将星为卯，年支见卯即成立。
+ *
+ * 另有四项以日柱干支整体取象，不涉天干地支的分查：
+ * 十恶大败（十位）、金神（乙丑己巳癸酉，论日时）、天赦（四季各一日）、
+ * 学堂词馆（年纳音五行的长生、临官）。天医按月支逆推一位。
  *
  * 童子煞两法并查：纳音法（金木午卯、水火酉戌、土命辰巳）与
  * 季节法（春秋寅子、冬夏卯未辰）。只走纳音法会漏掉日支上的童子煞，
@@ -357,6 +364,63 @@ object ShenShaAnalyzer {
         "甲寅", "乙卯", "丁未", "戊戌", "己未", "庚申", "辛酉", "癸丑"
     )
 
+    /**
+     * 十恶大败日：只看日柱。
+     *
+     * 口诀「甲辰乙巳与壬申，丙申丁亥及庚辰，戊戌癸亥加辛巳，己丑都来十位神」。
+     * 其理在禄元尽绝——如甲辰、乙巳之禄在寅卯，遇辰巳为禄绝之地，故称大败。
+     */
+    private val SHI_E_DA_BAI = setOf(
+        "甲辰", "乙巳", "壬申", "丙申", "丁亥",
+        "庚辰", "戊戌", "癸亥", "辛巳", "己丑"
+    )
+
+    /**
+     * 金神：乙丑、己巳、癸酉三组，论日柱与时柱。
+     *
+     * 《渊海子平》「金神入火乡，富贵天下响」——金神本无根，须得火制方成器。
+     */
+    private val JIN_SHEN = setOf("乙丑", "己巳", "癸酉")
+
+    /**
+     * 天赦日：春戊寅、夏甲午、秋戊申、冬甲子，只看日柱。
+     *
+     * 《渊海子平》「春赦戊寅夏甲午，戊申秋令甲子冬」——四季各一日，
+     * 取四时之气全而不偏，故为赦。
+     */
+    private val TIAN_SHE_BY_SEASON: Map<DiZhi, String> = buildMap {
+        listOf(DiZhi.YIN, DiZhi.MAO, DiZhi.CHEN).forEach { put(it, "戊寅") }
+        listOf(DiZhi.SI, DiZhi.WU, DiZhi.WEI).forEach { put(it, "甲午") }
+        listOf(DiZhi.SHEN, DiZhi.YOU, DiZhi.XU).forEach { put(it, "戊申") }
+        listOf(DiZhi.HAI, DiZhi.ZI, DiZhi.CHOU).forEach { put(it, "甲子") }
+    }
+
+    /**
+     * 学堂、词馆：以**年柱纳音**五行的长生、临官之地取。
+     *
+     * 《三命通会·论学堂词馆》「金命见巳、木命见亥、水命见申、火命见寅、土命见申」
+     * 为学堂；「金命见申、木命见寅、水命见亥、火命见巳、土命见亥」为词馆。
+     * 土寄水宫，故长生临官与水土同。年柱纳音水中见申，即「水长生在申」。
+     */
+    private val XUE_TANG: Map<WuXing, DiZhi> = mapOf(
+        WuXing.JIN to DiZhi.SI, WuXing.MU to DiZhi.HAI, WuXing.SHUI to DiZhi.SHEN,
+        WuXing.HUO to DiZhi.YIN, WuXing.TU to DiZhi.SHEN
+    )
+    private val CI_GUAN: Map<WuXing, DiZhi> = mapOf(
+        WuXing.JIN to DiZhi.SHEN, WuXing.MU to DiZhi.YIN, WuXing.SHUI to DiZhi.HAI,
+        WuXing.HUO to DiZhi.SI, WuXing.TU to DiZhi.HAI
+    )
+
+    /**
+     * 将星：三合局的旺神。申子辰见子、寅午戌见午、巳酉丑见酉、亥卯未见卯。
+     *
+     * 《三命通会》「将星者，如万军之中，一将当先」——居三合之中位，故最贵。
+     */
+    private val GROUP_GENERAL = listOf(DiZhi.ZI, DiZhi.WU, DiZhi.YOU, DiZhi.MAO)
+
+    /** 天医：月支前一位。寅月见丑、卯月见寅，依次逆推。 */
+    private val TIAN_YI_MEDICAL: Map<DiZhi, DiZhi> = DiZhi.entries.associateWith { it.shift(-1) }
+
     // ---------------------------------------------------------------- 规则
 
     /**
@@ -509,6 +573,42 @@ object ShenShaAnalyzer {
         out += Rule("八专日", ShenShaCategory.NEUTRAL, "日柱干支所属", DAY_ONLY) { _, g, z ->
             g.cn + z.cn in BA_ZHUAN
         }
+        out += Rule("十恶大败", ShenShaCategory.INAUSPICIOUS, "日柱干支所属", DAY_ONLY) { _, g, z ->
+            g.cn + z.cn in SHI_E_DA_BAI
+        }
+        // 金神论日时两柱：日柱为命主自坐，时柱为归宿，两处见之皆成器
+        out += Rule(
+            "金神",
+            ShenShaCategory.NEUTRAL,
+            "乙丑、己巳、癸酉，论日时",
+            setOf(PillarPosition.DAY, PillarPosition.HOUR)
+        ) { _, g, z -> g.cn + z.cn in JIN_SHEN }
+
+        // 天赦：按月令所属四季取那一日，只论日柱
+        TIAN_SHE_BY_SEASON[month]?.let { day ->
+            out += Rule("天赦", ShenShaCategory.AUSPICIOUS, "月令${month.cn}，天赦日${day}", DAY_ONLY) { _, g, z ->
+                g.cn + z.cn == day
+            }
+        }
+
+        // 学堂、词馆：年柱纳音五行的长生与临官之地
+        input.yearNaYin?.let { element ->
+            XUE_TANG[element]?.let { t ->
+                out += Rule("学堂", ShenShaCategory.AUSPICIOUS, "年纳音${element.cn}，长生在${t.cn}") { _, _, z ->
+                    z == t
+                }
+            }
+            CI_GUAN[element]?.let { t ->
+                out += Rule("词馆", ShenShaCategory.AUSPICIOUS, "年纳音${element.cn}，临官在${t.cn}") { _, _, z ->
+                    z == t
+                }
+            }
+        }
+
+        // 天医：月支前一位
+        TIAN_YI_MEDICAL[month]?.let { t ->
+            out += Rule("天医", ShenShaCategory.AUSPICIOUS, "月令${month.cn}前一位") { _, _, z -> z == t }
+        }
 
         // ---- 天喜、红鸾、孤辰、寡宿：只以年支查
         TIAN_XI[yZhi]?.let { t ->
@@ -556,6 +656,11 @@ object ShenShaAnalyzer {
             }
             out += Rule("华盖", ShenShaCategory.NEUTRAL, "${label}${base.cn}所属三合局") { pos, _, z ->
                 z == GROUP_CANOPY[idx] && pos != basePos
+            }
+            // 将星与华盖同理要排除基准宫位：子午卯酉既是三合中神，又常是本命某一柱，
+            // 不排除则「年支取年支」恒中，噪声大于信息（通行工具亦不列）。
+            out += Rule("将星", ShenShaCategory.AUSPICIOUS, "${label}${base.cn}所属三合局") { pos, _, z ->
+                z == GROUP_GENERAL[idx] && pos != basePos
             }
             out += Rule("亡神", ShenShaCategory.INAUSPICIOUS, "${label}${base.cn}所属三合局") { _, _, z ->
                 z == GROUP_WANG[idx]

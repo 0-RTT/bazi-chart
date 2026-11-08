@@ -81,9 +81,15 @@ for gone in ["ElementPanel", "PatternPanel", "ShenShaPanel", "RelationPanel", "S
 for word in ["五行力量", "格局与调候", "刑冲合害"]:
     check(word not in plate, "命盘页仍出现已移除的标题：%s" % word)
 
-# 五行记号五种形状齐全
-for wx in ["WuXing.MU", "WuXing.HUO", "WuXing.TU", "WuXing.JIN", "WuXing.SHUI"]:
-    check(wx in plate, "五行记号缺少分支：%s" % wx)
+# 五行标记改为「本字」：干支大字右下角写木火土金水，与干支同色。
+# 抽象图形（树/焰/山/菱/滴）已下线——不认字就看不懂，认字也要先记图形。
+check("ElementGlyph" not in plate, "命盘页仍在用抽象五行图形")
+check("Canvas" not in plate, "命盘页仍在用 Canvas 自绘记号")
+check("fun GanZhiCell(" in plate, "缺少干支单元 GanZhiCell")
+check("wx.cn" in plate, "干支单元未渲染五行本字")
+check("fontSize = 30.sp" in plate, "干支大字应为 30sp")
+# 藏干一格仍是「干+五行」，如「庚金」
+check("hidden.hidden.gan.wuXing.cn" in plate, "藏干未附五行本字")
 
 # 表内每行都取自引擎字段，不得在 UI 里现算
 for field in ["ownGrowthPhase", "voidBranches", "growthPhase", "naYin", "ganTenGod", "hiddenStems"]:

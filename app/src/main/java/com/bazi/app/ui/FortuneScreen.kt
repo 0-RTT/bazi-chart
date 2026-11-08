@@ -27,8 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bazi.app.ChartBundle
@@ -177,13 +175,7 @@ private fun LuckChip(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            luck.ganZhi,
-            fontFamily = FontFamily.Serif,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            color = elementColor(luck.gan.wuXing)
-        )
+        GanZhiPair(luck.gan, luck.zhi, fontSize = 20.sp)
         Spacer(Modifier.height(3.dp))
         Text(
             "${luck.startAge}–${luck.endAge}",
@@ -210,13 +202,7 @@ private fun LuckChip(
 private fun LuckDetailPanel(luck: LuckPillar, isCurrent: Boolean) {
     Panel(Modifier.padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                luck.ganZhi,
-                fontFamily = FontFamily.Serif,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Medium,
-                color = elementColor(luck.gan.wuXing)
-            )
+            GanZhiPair(luck.gan, luck.zhi, fontSize = 26.sp, showElement = true)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -253,12 +239,7 @@ private fun AnnualCell(annual: AnnualFortune, current: Boolean, modifier: Modifi
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                annual.ganZhi,
-                fontFamily = FontFamily.Serif,
-                fontSize = 16.sp,
-                color = elementColor(annual.gan.wuXing)
-            )
+            GanZhiPair(annual.gan, annual.zhi, fontSize = 16.sp)
             Text(
                 "${annual.year}",
                 fontSize = 9.sp,
