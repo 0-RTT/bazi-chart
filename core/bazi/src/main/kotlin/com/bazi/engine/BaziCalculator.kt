@@ -3,6 +3,7 @@ package com.bazi.engine
 import com.bazi.calendar.BirthInput
 import com.bazi.calendar.CalendarConverter
 import com.bazi.calendar.Gender
+import com.bazi.calendar.SolarTerms
 import com.bazi.calendar.toLocalDateTime
 import com.bazi.calendar.toSolarTime
 import com.tyme.eightchar.ChildLimit
@@ -56,8 +57,8 @@ object BaziCalculator {
         }
 
         val startLuck = buildStartLuck(input, moment)
-        val luckPillars = buildLuckPillars(input, moment, dayMaster)
-        val annuals = buildAnnuals(input, luckPillars, dayMaster, annualSpan)
+        val luckPillars = buildLuckPillars(input, moment, dayMaster, voidBranches)
+        val annuals = buildAnnuals(input, luckPillars, dayMaster, voidBranches, annualSpan)
 
         return BaziChart(
             input = input,
@@ -94,7 +95,8 @@ object BaziCalculator {
     private fun buildLuckPillars(
         input: BirthInput,
         moment: com.bazi.calendar.ResolvedMoment,
-        dayMaster: TianGan
+        dayMaster: TianGan,
+        voidBranches: List<DiZhi>
     ): List<LuckPillar> {
         val childLimit = ChildLimit.fromSolarTime(
             moment.trueSolarTime.toSolarTime(),
@@ -117,7 +119,9 @@ object BaziCalculator {
                 ganZhi = gan.cn + zhi.cn,
                 ganTenGod = TenGod.between(dayMaster, gan),
                 zhiMainTenGod = TenGod.between(dayMaster, HiddenStemTable.mainStem(zhi)),
-                growthPhase = GrowthPhaseTable.of(dayMaster, zhi)
+                growthPhase = GrowthPhaseTable.of(dayMaster, zhi),
+                naYin = NaYin.of(ganZhiIndexOf(gan, zhi)),
+                isEmptyBranch = zhi in voidBranches
             )
             decade = decade.next(1)
         }
@@ -128,6 +132,7 @@ object BaziCalculator {
         input: BirthInput,
         luckPillars: List<LuckPillar>,
         dayMaster: TianGan,
+        voidBranches: List<DiZhi>,
         span: Int
     ): List<AnnualFortune> {
         val birthYear = input.year
@@ -144,9 +149,69 @@ object BaziCalculator {
                 ganZhi = gan.cn + zhi.cn,
                 ganTenGod = TenGod.between(dayMaster, gan),
                 luckIndex = luck?.index ?: -1,
-                luckGanZhi = luck?.ganZhi ?: "未起运"
+                luckGanZhi = luck?.ganZhi ?: "未起运",
+                naYin = NaYin.of(ganZhiIndex),
+                isEmptyBranch = zhi in voidBranches
             )
         }
+    }
+
+    /**
+     * 流月。
+     *
+     * 十二个月建以「节」为界，寅月自立春起算。月干用五虎遁：
+     * 甲己之年丙作首、乙庚之岁戊为头、丙辛必定寻庚起、丁壬壬位顺行流、戊癸之年甲寅求。
+     * 丑月的终点落在次年立春，属正常的跨年，不是缺陷。
+     */
+    fun monthliesOf(
+        chart: BaziChart,
+        year: Int,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ): List<MonthlyFortune> {
+        val jie = SolarTerms.jieOfYear(year)
+        if (jie.size < 12) return emptyList()
+        val nextYearFirst = SolarTerms.jieOfYear(year + 1).firstOrNull()?.time
+
+        val yearGanIndex = ((year - 4) % 10 + 10) % 10
+        val firstMonthGan = (yearGanIndex % 5 * 2 + 2) % 10
+
+        return (0 until 12).map { i ->
+            val gan = TianGan.entries[(firstMonthGan + i) % 10]
+            val zhi = DiZhi.of(SolarTerms.JIE_BRANCHES[i])
+            val start = jie[i].time
+            val end = if (i < 11) jie[i + 1].time else (nextYearFirst ?: start.plusDays(30))
+            MonthlyFortune(
+                index = i,
+                monthName = MONTH_NAMES[i],
+                gan = gan,
+                zhi = zhi,
+                ganZhi = gan.cn + zhi.cn,
+                startTime = start,
+                endTime = end,
+                ganTenGod = TenGod.between(chart.dayMaster, gan),
+                zhiMainTenGod = TenGod.between(chart.dayMaster, HiddenStemTable.mainStem(zhi)),
+                naYin = NaYin.of(ganZhiIndexOf(gan, zhi)),
+                isEmptyBranch = zhi in chart.voidBranches,
+                isCurrent = !today.isBefore(start.toLocalDate()) && today.isBefore(end.toLocalDate())
+            )
+        }
+    }
+
+    private val MONTH_NAMES = arrayOf(
+        "正月", "二月", "三月", "四月", "五月", "六月",
+        "七月", "八月", "九月", "十月", "冬月", "腊月"
+    )
+
+    /**
+     * 由天干地支反推六十甲子序号。
+     *
+     * 大运与流月的干支是现算的，没有 SixtyCycle 对象可查，故用同余条件解出。
+     */
+    fun ganZhiIndexOf(gan: TianGan, zhi: DiZhi): Int {
+        for (i in 0 until 60) {
+            if (i % 10 == gan.ordinal && i % 12 == zhi.ordinal) return i
+        }
+        return 0
     }
 
     /** 六十甲子序号。以 NAMES 反查，避免依赖库内部 index 的可见性。 */

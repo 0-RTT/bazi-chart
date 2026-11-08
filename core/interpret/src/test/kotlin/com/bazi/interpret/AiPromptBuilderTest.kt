@@ -14,12 +14,12 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * AI 指令文本回归。
+ * 盘面信息文本回归。
  *
- * 这段文本是要整段交给大模型的，最怕两件事：
+ * 这段文本要整段交给大模型，最怕三件事：
  * 1. 生成时抛异常（格式化占位符与参数不匹配）；
- * 2. 命盘关键信息漏字段，模型拿到残缺数据后自行脑补。
- * 所以这里既跑通构建，也逐项校验必须出现的内容。
+ * 2. 关键字段遗漏，模型拿到残缺数据后自行脑补；
+ * 3. 混进任务指令或规避性话语——按要求本段只陈述盘面，不指挥读者。
  */
 class AiPromptBuilderTest {
 
@@ -39,51 +39,80 @@ class AiPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("指令文本可正常生成且不短于 1000 字")
+    @DisplayName("文本可正常生成且不短于 4000 字")
     fun generates() {
         val text = prompt()
-        assertTrue(text.length > 1000, "实际长度 ${text.length}")
+        assertTrue(text.length > 4000, "实际长度 ${text.length}")
+        assertFalse(text.contains("\${"), "存在未替换的模板占位符")
+        assertFalse(text.contains("null"), "存在 null 值")
+        assertFalse(text.contains("NaN"), "存在 NaN")
     }
 
     @Test
-    @DisplayName("包含四柱、日主与十神")
-    fun containsCoreChart() {
+    @DisplayName("九节齐全")
+    fun sectionsPresent() {
+        val text = prompt()
+        listOf(
+            "## 一、出生", "## 二、四柱", "## 三、四柱神煞",
+            "## 四、大运", "## 五、大运神煞", "## 六、流年",
+            "## 七、流年神煞", "## 八、流月", "## 九、古籍分歧"
+        ).forEach { title -> assertTrue(text.contains(title), "缺少章节：$title") }
+    }
+
+    @Test
+    @DisplayName("四柱、日主、藏干、纳音、空亡均在表中")
+    fun chartFields() {
         val text = prompt()
         assertTrue(text.contains("丙寅"), "缺年柱")
         assertTrue(text.contains("癸酉"), "缺日柱")
         assertTrue(text.contains("癸水"), "缺日主")
-        assertTrue(text.contains("日主"), "缺十神占位")
-        assertTrue(text.contains("正财"), "缺十神")
-    }
-
-    @Test
-    @DisplayName("包含旺衰、格局、调候、神煞与大运")
-    fun containsAnalysisSections() {
-        val text = prompt()
-        listOf("五行力量", "格局与调候", "神煞", "刑冲合害", "大运与流年").forEach { title ->
-            assertTrue(text.contains(title), "缺少章节：$title")
+        listOf("藏干", "藏干十神", "纳音", "空亡", "星运").forEach {
+            assertTrue(text.contains(it), "缺字段：$it")
         }
-        assertTrue(text.contains("帮身之力"), "缺旺衰结论")
-        assertTrue(text.contains("起运"), "缺起运信息")
     }
 
     @Test
-    @DisplayName("包含分析任务清单与输出约束")
-    fun containsTasks() {
+    @DisplayName("大运与流年都带纳音、空亡、神煞列")
+    fun luckAndAnnualColumns() {
         val text = prompt()
-        assertTrue(text.contains("请完成以下分析"), "缺任务章节")
-        assertTrue(text.contains("输出要求"), "缺输出约束")
-        assertTrue(text.contains("日主旺衰复核"), "缺第一项任务")
-        assertFalse(text.contains("\${"), "存在未替换的模板占位符")
-        assertFalse(text.contains("null"), "存在 null 值")
+        assertTrue(text.contains("| 大运 | 虚岁 | 公历年 | 干十神 | 支十神 | 星运 | 纳音 | 空亡 | 神煞 |"), "大运表头不符")
+        assertTrue(text.contains("| 年份 | 虚岁 | 干支 | 十神 | 纳音 | 空亡 | 神煞 | 所属大运 |"), "流年表头不符")
     }
 
     @Test
-    @DisplayName("流年表覆盖参考年之后的六年")
-    fun containsUpcomingYears() {
+    @DisplayName("流月为参考年十二个月建，寅月起、丑月终")
+    fun monthlies() {
         val text = prompt(2026)
-        (2027..2032).forEach { year ->
-            assertTrue(text.contains("| $year |"), "缺 $year 年流年行")
+        assertTrue(text.contains("## 八、流月（2026 年）"), "缺流月章节或年份不符")
+        assertTrue(text.contains("正月寅月"), "缺正月")
+        assertTrue(text.contains("腊月丑月"), "缺腊月")
+        assertTrue(text.contains("2026-02-0"), "缺立春交节时刻")
+    }
+
+    @Test
+    @DisplayName("十部古籍逐一列出，且给出分歧对照")
+    fun classics() {
+        val text = prompt()
+        listOf(
+            "滴天髓", "穷通宝鉴", "三命通会", "八字提要", "子平真诠",
+            "天元咸巫", "神峰通考", "千里命稿", "五行精纪", "李虚中命书"
+        ).forEach { book -> assertTrue(text.contains(book), "缺古籍：$book") }
+        assertTrue(text.contains("### 分歧对照"), "缺分歧对照小节")
+        assertTrue(text.contains("命主是谁"), "缺主星分歧轴")
+        assertTrue(text.contains("用神从哪里取"), "缺取用分歧轴")
+        assertTrue(text.contains("纳音用不用"), "缺纳音分歧轴")
+    }
+
+    @Test
+    @DisplayName("不含任务指令与规避性话语")
+    fun noTasksOrDisclaimers() {
+        val text = prompt()
+        listOf(
+            "请完成以下分析", "输出要求", "请你", "请分析",
+            "仅供参考", "不构成", "不作为", "风险提示",
+            "仅供传统文化研究", "不可作为"
+        ).forEach { banned ->
+            assertFalse(text.contains(banned), "出现了不应有的措辞：$banned")
         }
     }
 }

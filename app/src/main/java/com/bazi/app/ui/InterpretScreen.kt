@@ -87,10 +87,13 @@ fun InterpretTab(interpretation: Interpretation) {
 }
 
 /**
- * AI 指令页。
+ * 盘面信息页。
  *
  * 排盘完成时这段文本已经生成好了（见 ChartBundle.aiPrompt），
  * 此处只负责呈现与复制——不做二次加工，也不联网。
+ *
+ * 文本只陈述盘面与古籍分歧，不含任务指令，也不含规避性话语：
+ * 读者要拿它做什么，由读者自己决定。
  */
 @Composable
 fun AiPromptTab(bundle: ChartBundle) {
@@ -105,15 +108,15 @@ fun AiPromptTab(bundle: ChartBundle) {
     ) {
         Panel {
             Text(
-                "把这段指令整段复制给任意大模型",
+                "把这段盘面整段复制给任意大模型",
                 fontFamily = FontFamily.Serif,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "指令里已经带上了完整命盘（四柱、十神、藏干、纳音、旺衰、格局、调候、神煞、大运流年）" +
-                    "和九项分析任务。模型拿到的是结论依据齐备的成品数据，不会自己去重排一遍干支。",
+                "含四柱与十神、藏干、纳音、空亡、四柱神煞，大运与流年的干支神煞，当年十二流月，" +
+                    "以及十部古籍对本盘的各家论断与分歧对照。全文只陈述盘面，不含任何任务指令。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -123,7 +126,7 @@ fun AiPromptTab(bundle: ChartBundle) {
                     val clipboard =
                         context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                     clipboard?.setPrimaryClip(
-                        ClipData.newPlainText("八字命盘分析指令", bundle.aiPrompt)
+                        ClipData.newPlainText("八字盘面", bundle.aiPrompt)
                     )
                     copied = true
                 },
@@ -133,11 +136,11 @@ fun AiPromptTab(bundle: ChartBundle) {
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
-                Text(if (copied) "已复制到剪贴板" else "复制全部指令", fontSize = 14.sp)
+                Text(if (copied) "已复制到剪贴板" else "复制全部内容", fontSize = 14.sp)
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                "共 ${bundle.aiPrompt.length} 字　·　离线生成，内容不含个人信息以外的任何上传",
+                "共 ${bundle.aiPrompt.length} 字　·　离线生成，不上传任何数据",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -166,7 +169,7 @@ fun AiPromptTab(bundle: ChartBundle) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.width(2.dp))
             Text(
-                "提示：粘贴到模型后若输出过短，可追加一句「第 8 项请逐年展开」。",
+                "提示：全文较长，粘贴后请确认末尾的「分歧对照」已完整带入。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

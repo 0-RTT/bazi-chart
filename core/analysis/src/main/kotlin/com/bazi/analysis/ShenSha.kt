@@ -18,11 +18,22 @@ data class ShenShaHit(
     val positionText: String get() = positions.joinToString("、") { it.cn }
 }
 
+/** 单柱上的神煞，用于大运、流年、流月等没有宫位可言的柱。 */
+data class ShenShaMark(
+    val name: String,
+    val category: ShenShaCategory,
+    val note: String
+)
+
 /**
  * 神煞。
  *
  * 神煞名目繁多、查法各异，是流派分歧最集中的区域，因此**全部表驱动**：
  * 增加一个神煞 = 增加一张表，不动判定逻辑。
+ *
+ * 查法一律以**本命**为基准：日干定天乙/文昌/禄/羊刃，年支与日支定三合局四煞，
+ * 月令定月德。这样同一套规则既能扫原局四柱，也能扫大运、流年、流月的干支——
+ * 只是原局还会额外给出宫位，运气柱只给名称。
  */
 object ShenShaAnalyzer {
 
@@ -85,41 +96,66 @@ object ShenShaAnalyzer {
         setOf(DiZhi.SI, DiZhi.YOU, DiZhi.CHOU) to TianGan.GENG
     )
 
+    /** 一条查法：名字、吉凶、出处口径，以及「给定干与支是否命中」。 */
+    private class Rule(
+        val name: String,
+        val category: ShenShaCategory,
+        val note: String,
+        val match: (TianGan, DiZhi) -> Boolean
+    )
+
+    /**
+     * 依本命建立的查法集合。
+     *
+     * 每条规则只依赖本命的日干、年支、日支、月令，与目标柱无关，
+     * 所以可以复用到任意数量的运柱上。
+     */
+    private fun rulesOf(chart: BaziChart): List<Rule> {
+        val dm = chart.dayMaster
+        val out = mutableListOf<Rule>()
+
+        TIAN_YI[dm]?.let { targets ->
+            out += Rule("天乙贵人", ShenShaCategory.AUSPICIOUS, "以日干${dm.cn}查") { _, z -> z in targets }
+        }
+        WEN_CHANG[dm]?.let { t ->
+            out += Rule("文昌", ShenShaCategory.AUSPICIOUS, "以日干${dm.cn}查") { _, z -> z == t }
+        }
+        LU_SHEN[dm]?.let { t ->
+            out += Rule("禄神", ShenShaCategory.AUSPICIOUS, "以日干${dm.cn}查") { _, z -> z == t }
+        }
+        YANG_REN[dm]?.let { t ->
+            out += Rule("羊刃", ShenShaCategory.INAUSPICIOUS, "以日干${dm.cn}查") { _, z -> z == t }
+        }
+
+        val bases = listOf(chart.yearPillar.zhi, chart.dayPillar.zhi)
+        GROUPS
+            .filter { (keys, _) -> bases.any { it in keys } }
+            .map { it.second }
+            .distinct()
+            .forEach { rule ->
+                out += Rule("桃花", ShenShaCategory.NEUTRAL, "依三合局查") { _, z -> z == rule.peach }
+                out += Rule("驿马", ShenShaCategory.NEUTRAL, "依三合局查") { _, z -> z == rule.horse }
+                out += Rule("华盖", ShenShaCategory.NEUTRAL, "依三合局查") { _, z -> z == rule.canopy }
+                out += Rule("将星", ShenShaCategory.AUSPICIOUS, "依三合局查") { _, z -> z == rule.general }
+            }
+
+        YUE_DE.entries.firstOrNull { (keys, _) -> chart.monthCommand in keys }?.value?.let { g ->
+            out += Rule("月德贵人", ShenShaCategory.AUSPICIOUS, "月令见${g.cn}") { gan, _ -> gan == g }
+        }
+
+        return out
+    }
+
+    /** 原局四柱的神煞，带宫位。 */
     fun analyze(chart: BaziChart): List<ShenShaHit> {
         val hits = mutableListOf<ShenShaHit>()
-        val branches = chart.pillars.map { it.position to it.zhi }
-        val dayMaster = chart.dayMaster
 
-        fun collect(name: String, category: ShenShaCategory, targets: List<DiZhi>, note: String) {
-            val positions = branches.filter { it.second in targets }.map { it.first }
-            if (positions.isNotEmpty()) hits += ShenShaHit(name, category, positions, note)
-        }
-
-        TIAN_YI[dayMaster]?.let { collect("天乙贵人", ShenShaCategory.AUSPICIOUS, it, "以日干${dayMaster.cn}查") }
-        WEN_CHANG[dayMaster]?.let { collect("文昌", ShenShaCategory.AUSPICIOUS, listOf(it), "以日干${dayMaster.cn}查") }
-        LU_SHEN[dayMaster]?.let { collect("禄神", ShenShaCategory.AUSPICIOUS, listOf(it), "以日干${dayMaster.cn}查") }
-        YANG_REN[dayMaster]?.let { collect("羊刃", ShenShaCategory.INAUSPICIOUS, listOf(it), "以日干${dayMaster.cn}查") }
-
-        val groupBases = listOfNotNull(
-            chart.yearPillar.zhi,
-            chart.dayPillar.zhi
-        )
-        val matchedRules = GROUPS.filter { (keys, _) -> groupBases.any { it in keys } }.map { it.second }
-        matchedRules.forEach { rule ->
-            collect("桃花", ShenShaCategory.NEUTRAL, listOf(rule.peach), "依三合局查")
-            collect("驿马", ShenShaCategory.NEUTRAL, listOf(rule.horse), "依三合局查")
-            collect("华盖", ShenShaCategory.NEUTRAL, listOf(rule.canopy), "依三合局查")
-            collect("将星", ShenShaCategory.AUSPICIOUS, listOf(rule.general), "依三合局查")
-        }
-
-        YUE_DE.entries.firstOrNull { (keys, _) -> chart.monthCommand in keys }
-            ?.value
-            ?.let { gan ->
-                val positions = chart.pillars.filter { it.gan == gan }.map { it.position }
-                if (positions.isNotEmpty()) {
-                    hits += ShenShaHit("月德贵人", ShenShaCategory.AUSPICIOUS, positions, "月令见${gan.cn}")
-                }
+        rulesOf(chart).forEach { rule ->
+            val positions = chart.pillars.filter { rule.match(it.gan, it.zhi) }.map { it.position }
+            if (positions.isNotEmpty()) {
+                hits += ShenShaHit(rule.name, rule.category, positions, rule.note)
             }
+        }
 
         val voidPositions = chart.pillars.filter { it.isEmptyBranch }.map { it.position }
         if (voidPositions.isNotEmpty()) {
@@ -133,4 +169,14 @@ object ShenShaAnalyzer {
 
         return hits
     }
+
+    /** 任意一柱（大运、流年、流月）上的神煞。 */
+    fun marksOn(chart: BaziChart, gan: TianGan, zhi: DiZhi): List<ShenShaMark> =
+        rulesOf(chart)
+            .filter { it.match(gan, zhi) }
+            .map { ShenShaMark(it.name, it.category, it.note) }
+
+    /** 多个运柱的神煞，按给定顺序逐柱返回。 */
+    fun marksOf(chart: BaziChart, pillars: List<Pair<TianGan, DiZhi>>): List<List<ShenShaMark>> =
+        pillars.map { (gan, zhi) -> marksOn(chart, gan, zhi) }
 }

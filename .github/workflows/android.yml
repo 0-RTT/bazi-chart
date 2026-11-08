@@ -36,6 +36,9 @@ jobs:
       - name: 历史存储格式校验
         run: python tools/verify/verify_history.py
 
+      - name: 古籍层与文本纯净度校验
+        run: python tools/verify/verify_classics.py
+
   build:
     name: 构建 Debug APK
     runs-on: ubuntu-latest

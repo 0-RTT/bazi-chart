@@ -23,7 +23,9 @@ data class AnalysisResult(
                 StrengthLevel.BALANCED ->
                     listOf(me.generatedBy(), me.generates(), me.overcomes())
                 StrengthLevel.SLIGHTLY_STRONG, StrengthLevel.STRONG, StrengthLevel.VERY_STRONG ->
-                    listOf(me.overcomes(), me.generatedBy().overcomes(), me.generates())
+                    // 财（我克）、官杀（克我）、食伤（我生）。官杀必须用 overcomeBy()，
+                    // 早前误写成 generatedBy().overcomes()，实际取到的是食伤，官杀从未入选。
+                    listOf(me.overcomes(), me.overcomeBy(), me.generates())
             }
         }
 }

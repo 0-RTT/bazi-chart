@@ -49,9 +49,11 @@ object Interpreter {
         sections += temperament(chart, analysis, dedup)
         sections += structure(chart, analysis, dedup)
         sections += tiaohouSection(analysis, dedup)
+        sections += yongShen(chart, analysis, dedup)
         sections += palaces(chart, dedup)
         sections += relations(chart, analysis, dedup)
         sections += fortune(chart, analysis, referenceYear, dedup)
+        sections += classicsSection(chart, analysis, dedup)
         sections += disclaimer()
 
         return Interpretation(sections, dedup)
@@ -162,6 +164,69 @@ object Interpreter {
         )
     }
 
+    // ---------------------------------------------------------- 取用取舍
+
+    /**
+     * 取用取舍。
+     *
+     * 专业看盘最容易含糊的一处：扶抑取用与调候取用不是同一条线。
+     * 两者同指，用神无疑；两者异指，须先说清「先取哪一条」，再谈吉凶。
+     * 这一节的存在，就是为了让后面所有关于吉凶的话都有个可追溯的落脚点。
+     */
+    private fun yongShen(chart: BaziChart, a: AnalysisResult, ids: MutableList<String>): Section {
+        val favor = a.favorableElements
+        val tiao = a.tiaohou.entry?.primary
+        val tiaoEl = tiao?.wuXing
+        val paragraphs = mutableListOf<String>()
+
+        paragraphs += "扶抑取用：日主${chart.dayMaster.cn}${chart.dayMaster.wuXing.cn}为${a.strength.level.cn}，" +
+            "宜${favor.joinToString("、") { it.cn }}。"
+        ids += "yongshen.fuyi"
+
+        if (tiao == null || tiaoEl == null) {
+            paragraphs += "调候一条缺表可比，此局取用只得以扶抑为准。"
+            ids += "yongshen.tiaohou.absent"
+            return Section("取用取舍", paragraphs)
+        }
+
+        paragraphs += "调候取用：${chart.monthCommand.cn}月${chart.dayMaster.cn}${chart.dayMaster.wuXing.cn}，" +
+            "《穷通宝鉴》主用${tiao.cn}（属${tiaoEl.cn}）。"
+        ids += "yongshen.tiaohou"
+
+        if (tiaoEl in favor) {
+            paragraphs += "两条线同指${tiaoEl.cn}，取用无疑——用神即${tiao.cn}，" +
+                "顺此者吉，逆此者否。此为诸家分歧最小的情形。"
+            ids += "yongshen.agree"
+        } else {
+            val favorText = favor.joinToString("、") { it.cn }
+            paragraphs += "两条线不同指：扶抑要${favorText}，调候要${tiaoEl.cn}。" +
+                "若气象偏枯（过寒、过热、过燥、过湿），当以调候为先，" +
+                "因寒暖失宜则格局无从舒展；若气候尚可，则仍以扶抑为据。"
+            ids += "yongshen.conflict"
+        }
+
+        paragraphs += (if (a.tiaohou.present.isEmpty()) {
+            "调候用神${tiao.cn}于四柱中全不见，此为先天欠缺，须待运程补足——" +
+                "凡行${tiaoEl.cn}之运，纵格局平平，亦有可为之机。"
+        } else {
+            "调候用神${tiao.cn}已见（${a.tiaohou.present.joinToString("、") { it.cn }}），寒暖之偏已得调停，"
+        }) + "这一层与旺衰无关，不可混看。"
+
+        return Section("取用取舍", paragraphs)
+    }
+
+    // ---------------------------------------------------------- 古籍分歧
+
+    /** 十家对同一盘的分歧，取四条主轴，每条都落到本盘的具体干支。 */
+    private fun classicsSection(chart: BaziChart, a: AnalysisResult, ids: MutableList<String>): Section {
+        val axes = ClassicReader.divergences(chart, a)
+        val paragraphs = axes.map { "${it.topic}——${it.onThisChart}" } +
+            "十家的完整论断（滴天髓、穷通宝鉴、三命通会、八字提要、子平真诠、" +
+            "天元咸巫、神峰通考、千里命稿、五行精纪、李虚中命书）见「AI」页。"
+        ids += "classics.divergence"
+        return Section("古籍分歧", paragraphs)
+    }
+
     // ---------------------------------------------------------- 六亲宫位
 
     private fun palaces(chart: BaziChart, ids: MutableList<String>): Section {
@@ -221,7 +286,7 @@ object Interpreter {
         if (current != null) {
             paragraphs += "当前行 ${current.ganZhi} 运（${current.startAge}–${current.endAge} 岁，" +
                 "${current.startYear}–${current.endYear} 年），干为${current.ganTenGod.cn}，支主${current.zhiMainTenGod.cn}。" +
-                fortuneHint(current.ganTenGod.category, current.gan.wuXing, a)
+                fortuneHint(current, a)
             ids += "fortune.current"
         } else {
             paragraphs += "尚未交入首步大运，当前仍属童限阶段。"
@@ -238,20 +303,51 @@ object Interpreter {
         return Section("大运走势", paragraphs)
     }
 
-    private fun fortuneHint(category: TenGodCategory, element: WuXing, a: AnalysisResult): String {
-        val base = when (category) {
-            TenGodCategory.SELF -> "此运比劫主事，自主与竞争并存。"
-            TenGodCategory.OUTPUT -> "此运食伤主事，宜表达、创作、开拓，需防泄身过度。"
-            TenGodCategory.WEALTH -> "此运财星主事，财务机会增多，身弱者需防因财耗身。"
-            TenGodCategory.OFFICER -> "此运官杀主事，责任与压力同来，宜正职、资质、管理。"
-            TenGodCategory.RESOURCE -> "此运印星主事，宜进修、置业、积累资历。"
+    /**
+     * 大运判词。
+     *
+     * 不只看十神类别：先看干支五行是否落在喜用，再看是否补上调候用神，
+     * 最后才落到十神所主的领域。三步都成立才算「可用之运」。
+     */
+    private fun fortuneHint(luck: com.bazi.engine.LuckPillar, a: AnalysisResult): String {
+        val favor = a.favorableElements
+        val ganGood = luck.gan.wuXing in favor
+        val zhiGood = luck.zhi.wuXing in favor
+
+        val tiao = a.tiaohou.entry?.primary
+
+        val base = when (luck.ganTenGod.category) {
+            TenGodCategory.SELF -> "比劫主事，自主与竞争并存"
+            TenGodCategory.OUTPUT -> "食伤主事，宜表达、创作、开拓"
+            TenGodCategory.WEALTH -> "财星主事，财务与实务的机会增多"
+            TenGodCategory.OFFICER -> "官杀主事，责任与压力同来，宜正职与资质"
+            TenGodCategory.RESOURCE -> "印星主事，宜进修、置业、积累资历"
         }
-        val fit = if (element in a.favorableElements) {
-            "运干属${element.cn}，与喜用相合，可为用。"
-        } else {
-            "运干属${element.cn}，与喜用相背，宜守成待时。"
+
+        val grade = when {
+            ganGood && zhiGood -> "干支皆入喜用，此运顺遂，可放胆作为"
+            ganGood && !zhiGood -> "干入喜用而支不入，事可谋而根基不稳，宜借势不宜独进"
+            !ganGood && zhiGood -> "支入喜用而干不入，环境有助而主张难行，宜顺势待时"
+            else -> "干支俱背喜用，此运宜守，不宜开疆"
         }
-        return base + fit
+
+        val extra = buildString {
+            if (!ganGood && !zhiGood) {
+                append("运干属").append(luck.gan.wuXing.cn).append("、运支属").append(luck.zhi.wuXing.cn)
+                append("，皆在忌中之列。")
+            } else {
+                append("运干属").append(luck.gan.wuXing.cn)
+                append(if (ganGood) "（喜）" else "（忌）")
+                append("、运支属").append(luck.zhi.wuXing.cn)
+                append(if (zhiGood) "（喜）" else "（忌）")
+                append("。")
+            }
+            if (tiao != null && luck.gan == tiao) {
+                append("且正补调候所缺之").append(tiao.cn).append("，寒暖得济，此为一层额外之助。")
+            }
+        }
+
+        return "$base。$grade。$extra"
     }
 
     // ---------------------------------------------------------- 免责

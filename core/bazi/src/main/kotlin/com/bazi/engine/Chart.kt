@@ -60,7 +60,10 @@ data class LuckPillar(
     val ganZhi: String,
     val ganTenGod: TenGod,
     val zhiMainTenGod: TenGod,
-    val growthPhase: GrowthPhase
+    val growthPhase: GrowthPhase,
+    val naYin: String,
+    /** 以本命日柱旬空衡量，运支是否落空。 */
+    val isEmptyBranch: Boolean
 )
 
 /** 流年。 */
@@ -74,7 +77,34 @@ data class AnnualFortune(
     val ganTenGod: TenGod,
     /** 所属大运序号，-1 表示尚未起运。 */
     val luckIndex: Int,
-    val luckGanZhi: String
+    val luckGanZhi: String,
+    val naYin: String,
+    val isEmptyBranch: Boolean
+)
+
+/**
+ * 流月。
+ *
+ * 月建以「节」为界，寅月自立春起，丑月落于次年小寒。
+ * [isCurrent] 由参考日期与节气时刻比较得出，仅用于在列表中标记。
+ */
+data class MonthlyFortune(
+    /** 0 = 寅月（正月），11 = 丑月（腊月）。 */
+    val index: Int,
+    /** 正月、二月……腊月。 */
+    val monthName: String,
+    val gan: TianGan,
+    val zhi: DiZhi,
+    val ganZhi: String,
+    /** 本节交节时刻，即本月起点。 */
+    val startTime: LocalDateTime,
+    /** 下一节交节时刻，即本月终点。 */
+    val endTime: LocalDateTime,
+    val ganTenGod: TenGod,
+    val zhiMainTenGod: TenGod,
+    val naYin: String,
+    val isEmptyBranch: Boolean,
+    val isCurrent: Boolean
 )
 
 /**
