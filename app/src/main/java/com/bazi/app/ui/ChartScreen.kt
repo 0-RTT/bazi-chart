@@ -1,5 +1,6 @@
 package com.bazi.app.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -91,10 +92,15 @@ fun ChartScreen(bundle: ChartBundle, onBack: () -> Unit) {
         // 用 weight 精确给出剩余高度：否则可滚动内容会按整屏高度测量，
         // 末尾几十 dp 滚不到底。
         Box(Modifier.weight(1f).navigationBarsPadding()) {
-            when (tab) {
-                0 -> ChartTab(bundle) { tab = 2 }
-                1 -> FortuneTab(bundle)
-                else -> AiPromptTab(bundle)
+            // 页签切成交叉淡入：原来是一帧之间整屏换掉，视线要重新找落点。
+            // 只做透明度的原因——命盘与运程都是长列表，加位移会和列表自身的
+            // 惯性滚动打架，看起来像两次运动。
+            Crossfade(targetState = tab, animationSpec = Motion.page, label = "tabSwitch") { index ->
+                when (index) {
+                    0 -> ChartTab(bundle) { tab = 2 }
+                    1 -> FortuneTab(bundle)
+                    else -> AiPromptTab(bundle)
+                }
             }
         }
     }

@@ -1,5 +1,8 @@
 package com.bazi.app.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +53,25 @@ object Radii {
     val panel = RoundedCornerShape(16.dp)
     val chip = RoundedCornerShape(12.dp)
     val tag = RoundedCornerShape(5.dp)
+}
+
+/**
+ * 动效口径。
+ *
+ * 只留三档，因为动效一多就互相打架：
+ * - [state]　就地变化（选中、高亮、边框粗细）；比手指的反应稍慢一点，但不能慢过知觉
+ * - [swap]　内容整体替换（换大运、换流年、换流月）；只做交叉淡入，不做位移，
+ *   因为这两块本身就在滚动容器里，再加位移会与惯性滚动抢注意力
+ * - [page]　页面级迁移（页签切换、进出命盘）
+ *
+ * 缓动统一用 [FastOutSlowInEasing]：起步快，动作在按下的一瞬间就有回应；
+ * 收尾慢，停下来的位置才看得清。线性或 EaseIn 在触屏上都会显得「黏」。
+ */
+internal object Motion {
+    val state = tween<Color>(durationMillis = 220, easing = FastOutSlowInEasing)
+    val thickness = tween<Dp>(durationMillis = 220, easing = FastOutSlowInEasing)
+    val swap = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
+    val page = tween<Float>(durationMillis = 200, easing = FastOutSlowInEasing)
 }
 
 @Composable
@@ -220,13 +243,32 @@ fun Segmented(
     ) {
         options.forEachIndexed { index, label ->
             val selected = index == selectedIndex
+            // 选中块与字色都过渡：原来是一帧之间从透明跳到纸色，眼睛会先被闪一下
+            // 才认出选中的是哪个。220ms 的底色推移足以把「换了个页签」和
+            // 「换了一张纸」区分开。
+            val chipBg by animateColorAsState(
+                targetValue = if (selected) {
+                    MaterialTheme.colorScheme.surface
+                } else {
+                    Color.Transparent
+                },
+                animationSpec = Motion.state,
+                label = "segmentBg"
+            )
+            val chipFg by animateColorAsState(
+                targetValue = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                animationSpec = Motion.state,
+                label = "segmentFg"
+            )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(9.dp))
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.surface else Color.Transparent
-                    )
+                    .background(chipBg)
                     .clickable { if (!selected) onSelect(index) }
                     .padding(vertical = 7.dp),
                 contentAlignment = Alignment.Center
@@ -235,11 +277,7 @@ fun Segmented(
                     label,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color = chipFg,
                     maxLines = 1
                 )
             }

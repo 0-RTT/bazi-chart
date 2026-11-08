@@ -1,5 +1,8 @@
 package com.bazi.app.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,33 +19,50 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bazi.app.ChartBundle
+import com.bazi.engine.AnnualFortune
 import com.bazi.engine.BaziCalculator
 import com.bazi.engine.BaziChart
-import com.bazi.engine.AnnualFortune
 import com.bazi.engine.LuckPillar
 import com.bazi.engine.MonthlyFortune
 import java.time.LocalDate
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+
+/** 大运格定宽。68dp 恰好放下「庚午」两字与 20–29 这种年龄跨度。 */
+private val CHIP_WIDTH = 68.dp
+
+/** 大运格底部「当运」那一行的高度。写死是为了让十格严格等高，见 [LuckChip]。 */
+private val CHIP_FOOT = 13.dp
 
 /**
  * 运程页。
  *
  * 问真式的读法：上方一条横向大运带（可点选），下方铺开该步大运的十个流年。
  * 从业者查盘的动作是「先落到某步运，再看这十年」，所以这两块必须同屏联动。
+ *
+ * 三处动效处理都只为一件事——让「我点了什么、它变成了什么」之间有承接：
+ * 1. 大运带选中后自动居中（[rememberLazyListState]），否则点到第 7 格时它可能已在屏幕外，
+ *    点了却看不见点了哪个；
+ * 2. 选中态底色与边框做 220ms 过渡，不是一帧之间翻色；
+ * 3. 详情、流年、流月三块换内容时交叉淡入，而不是整块文字直接换掉。
  */
 @Composable
 fun FortuneTab(bundle: ChartBundle) {
@@ -61,6 +81,21 @@ fun FortuneTab(bundle: ChartBundle) {
     }
     val selectedLuck = chart.luckPillars.getOrNull(selectedIndex)
 
+    val luckRow = rememberLazyListState()
+    LaunchedEffect(selectedIndex, chart) {
+        // 首次布局之前 visibleItemsInfo 是空的，此时的滚动会被静默丢弃——
+        // 进页面时当前运就停在屏幕外。等它产出可见项再滚。
+        snapshotFlow { luckRow.layoutInfo.visibleItemsInfo.firstOrNull()?.size }
+            .filterNotNull()
+            .first()
+        val info = luckRow.layoutInfo
+        val firstVisible = info.visibleItemsInfo.firstOrNull() ?: return@LaunchedEffect
+        val viewport = info.viewportEndOffset - info.viewportStartOffset
+        // 负偏移表示把该格往视口里拉；靠边的几格会被 clamp，正好停在端点。
+        val offset = -((viewport - firstVisible.size) / 2).coerceAtLeast(0)
+        luckRow.animateScrollToItem(selectedIndex, offset)
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 14.dp),
@@ -73,6 +108,7 @@ fun FortuneTab(bundle: ChartBundle) {
                 SectionTitle("大运", trailing = if (chart.startLuck.forward) "顺排" else "逆排")
             }
             LazyRow(
+                state = luckRow,
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -89,7 +125,18 @@ fun FortuneTab(bundle: ChartBundle) {
         }
 
         selectedLuck?.let { luck ->
-            item { LuckDetailPanel(luck, currentLuckIndex == selectedIndex) }
+            item {
+                Crossfade(
+                    targetState = luck.index,
+                    animationSpec = Motion.swap,
+                    label = "luckDetail"
+                ) { index ->
+                    val shown = chart.luckPillars.getOrNull(index)
+                    if (shown != null) {
+                        LuckDetailPanel(shown, index == currentLuckIndex)
+                    }
+                }
+            }
 
             val years = chart.annuals.filter { it.luckIndex == luck.index }
             if (years.isNotEmpty()) {
@@ -99,18 +146,30 @@ fun FortuneTab(bundle: ChartBundle) {
                             "流年",
                             trailing = "${years.first().year}–${years.last().year}"
                         )
-                        years.chunked(5).forEach { row ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                                row.forEach { annual ->
-                                    AnnualCell(
-                                        annual = annual,
-                                        current = annual.year == currentYear,
-                                        selected = annual.year == selectedYear,
-                                        onClick = { pickedYear = annual.year },
-                                        modifier = Modifier.weight(1f)
-                                    )
+                        Crossfade(
+                            targetState = luck.index,
+                            animationSpec = Motion.swap,
+                            label = "annualSwap"
+                        ) { index ->
+                            // 同上：动画期间每帧重组，筛选结果要缓存。
+                            val list = remember(chart, index) {
+                                chart.annuals.filter { it.luckIndex == index }
+                            }
+                            Column {
+                                list.chunked(5).forEach { row ->
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                        row.forEach { annual ->
+                                            AnnualCell(
+                                                annual = annual,
+                                                current = annual.year == currentYear,
+                                                selected = annual.year == selectedYear,
+                                                onClick = { pickedYear = annual.year },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                        repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                                    }
                                 }
-                                repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
                             }
                         }
                     }
@@ -139,46 +198,65 @@ fun FortuneTab(bundle: ChartBundle) {
  */
 @Composable
 private fun MonthSection(chart: BaziChart, year: Int, currentYear: Int) {
-    val months = remember(chart, year) { BaziCalculator.monthliesOf(chart, year) }
-    if (months.isEmpty()) return
+    // 先按 target 判空：没有月份就整块不渲染，不留一个只有标题的空壳。
+    val probe = remember(chart, year) { BaziCalculator.monthliesOf(chart, year) }
+    if (probe.isEmpty()) return
 
     Column(Modifier.padding(horizontal = 16.dp)) {
         SectionTitle(
             "流月",
             trailing = if (year == currentYear) "$year 年 · 本年" else "$year 年"
         )
-        months.chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                row.forEach { m -> MonthCell(m, Modifier.weight(1f)) }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+        // 只有月份块参与淡入淡出：标题里的年份要立刻变，跟着一起淡会看不清换到了哪一年。
+        // 月份必须 remember：淡入淡出的 180ms 里 content 每帧重组，不缓存就是每帧
+        // 重算十二个节气。
+        Crossfade(targetState = year, animationSpec = Motion.swap, label = "monthSwap") { y ->
+            val months = remember(chart, y) { BaziCalculator.monthliesOf(chart, y) }
+            Column {
+                months.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        row.forEach { m -> MonthCell(m, Modifier.weight(1f)) }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "月建以节为界，寅月自立春起算，丑月止于次年立春。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "月建以节为界，寅月自立春起算，丑月止于次年立春。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
 @Composable
 private fun MonthCell(m: MonthlyFortune, modifier: Modifier = Modifier) {
     val highlight = m.isCurrent
+    val cellBg by animateColorAsState(
+        targetValue = if (highlight) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = Motion.state,
+        label = "monthBg"
+    )
+    val cellLine by animateColorAsState(
+        targetValue = if (highlight) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.outline
+        },
+        animationSpec = Motion.state,
+        label = "monthLine"
+    )
     Column(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (highlight) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface
-            )
-            .border(
-                0.5.dp,
-                if (highlight) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(8.dp)
-            )
+            .background(cellBg)
+            .border(0.5.dp, cellLine, RoundedCornerShape(8.dp))
             .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -230,6 +308,14 @@ private fun luckLengthText(luck: com.bazi.engine.StartLuckInfo): String = buildS
     if (luck.dayCount > 0) append("${luck.dayCount} 天")
 }
 
+/**
+ * 大运格。
+ *
+ * 三行固定内容（干支、年龄、起始年）加一行底注。底注这一行**不能用 if 掐掉**：
+ * 早先的写法是 `if (current) { Text("当运") }`，于是当运那一格比邻格多出一行字，
+ * 整条大运带的下沿就成了锯齿。现在无论是否当运，[CHIP_FOOT] 那一格都占满高度，
+ * 只在当运时写字——十格永远等高。
+ */
 @Composable
 private fun LuckChip(
     luck: LuckPillar,
@@ -237,20 +323,36 @@ private fun LuckChip(
     current: Boolean,
     onClick: () -> Unit
 ) {
+    val chipBg by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = Motion.state,
+        label = "luckChipBg"
+    )
+    val chipLine by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.outline
+        },
+        animationSpec = Motion.state,
+        label = "luckChipLine"
+    )
+    // 边框粗细一起过渡：只做颜色不做粗细时，选中的瞬间仍会「硬」一下。
+    val chipLineWidth by animateDpAsState(
+        targetValue = if (selected) 1.dp else 0.5.dp,
+        animationSpec = Motion.thickness,
+        label = "luckChipLineWidth"
+    )
     Column(
         modifier = Modifier
-            .width(68.dp)
+            .width(CHIP_WIDTH)
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface
-            )
-            .border(
-                width = if (selected) 1.dp else 0.5.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outline,
-                shape = RoundedCornerShape(10.dp)
-            )
+            .background(chipBg)
+            .border(chipLineWidth, chipLine, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -267,11 +369,11 @@ private fun LuckChip(
             fontSize = 10.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (current) {
-            Spacer(Modifier.height(2.dp))
+        Box(Modifier.height(CHIP_FOOT), contentAlignment = Alignment.Center) {
             Text(
-                "当运",
+                text = if (current) "当运" else "",
                 fontSize = 9.sp,
+                lineHeight = 9.sp,
                 color = MaterialTheme.colorScheme.primary
             )
         }
@@ -308,20 +410,36 @@ private fun AnnualCell(
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val lit = current || selected
+    val cellBg by animateColorAsState(
+        targetValue = if (lit) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = Motion.state,
+        label = "annualBg"
+    )
+    val cellLine by animateColorAsState(
+        targetValue = if (lit) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.outline
+        },
+        animationSpec = Motion.state,
+        label = "annualLine"
+    )
+    val cellLineWidth by animateDpAsState(
+        targetValue = if (selected) 1.dp else 0.5.dp,
+        animationSpec = Motion.thickness,
+        label = "annualLineWidth"
+    )
     Box(
         modifier = modifier
             .padding(horizontal = 2.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (current || selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface
-            )
-            .border(
-                if (selected) 1.dp else 0.5.dp,
-                if (current || selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(8.dp)
-            )
+            .background(cellBg)
+            .border(cellLineWidth, cellLine, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 7.dp),
         contentAlignment = Alignment.Center

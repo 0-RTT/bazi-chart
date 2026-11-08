@@ -13,8 +13,8 @@ android {
         // minSdk 取 26：核心引擎使用 java.time，26 起原生支持，免去 desugaring 依赖
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "0.9.0"
+        versionCode = 12
+        versionName = "0.10.0"
     }
 
     buildTypes {
@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.animation)
     debugImplementation(libs.compose.ui.tooling)
 
     // app 同时用到分析层（命盘表的神煞行）与盘面文本层。

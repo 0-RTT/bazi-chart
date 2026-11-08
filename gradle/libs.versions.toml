@@ -21,6 +21,9 @@ compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
+# 显式声明而非吃 material3 的传递依赖：material3 只带 animation-core，
+# 而 Crossfade / animateColorAsState / animateDpAsState 都在 animation 完整包里。
+compose-animation = { module = "androidx.compose.animation:animation" }
 
 tyme4kt = { module = "cn.6tail:tyme4kt", version.ref = "tyme" }
 
