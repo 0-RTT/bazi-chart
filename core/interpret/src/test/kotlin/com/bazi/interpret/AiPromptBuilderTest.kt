@@ -50,53 +50,74 @@ class AiPromptBuilderTest {
     )
 
     @Test
-    @DisplayName("任务段九节齐全：校盘、主链、纪律、维度、事件、建议、流月、不确定、分档")
-    fun taskSections() {
-        val text = prompt()
+    @DisplayName("任务段是用户给定的一段话：一整行，不被折行切断")
+    fun taskIsOneParagraph() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        // 这段话要整段复制出去，折行会让各家模型当成列表或断句。
+        // 断言「同一行既以『请你以』开头、又以『风险点。』收尾」，钉住不折行。
+        assertTrue(
+            task.lines().any {
+                it.startsWith("请你以精通中国传统命理") && it.endsWith("需规避的风险点。")
+            },
+            "任务段被折成了多行，或首尾措辞与用户给定不一致"
+        )
+    }
+
+    @Test
+    @DisplayName("任务段给了推演次序：日主强弱 → 十神格局 → 用神喜忌，次序不可乱")
+    fun taskOrder() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        listOf("日主强弱与五行旺衰", "十神格局", "用神喜忌").forEach {
+            assertTrue(task.contains(it), "任务段缺推演环节：$it")
+        }
+        assertTrue(
+            task.indexOf("日主强弱与五行旺衰") < task.indexOf("十神格局"),
+            "次序错：日主强弱应在十神格局之前"
+        )
+        assertTrue(
+            task.indexOf("十神格局") < task.indexOf("用神喜忌"),
+            "次序错：十神格局应在用神喜忌之前"
+        )
+    }
+
+    @Test
+    @DisplayName("任务段六项维度齐全，且按用户给的次序排列")
+    fun taskDimensions() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        val dims = listOf("健康", "学业", "事业", "财运", "人际关系", "婚姻与感情")
+        dims.forEach { assertTrue(task.contains(it), "任务段缺维度：$it") }
+        // 逐对比较下标，次序错一处就报
+        dims.zipWithNext().forEach { (a, b) ->
+            assertTrue(task.indexOf(a) < task.indexOf(b), "维度次序错：$a 应在 $b 之前")
+        }
+    }
+
+    @Test
+    @DisplayName("任务段要求每项交代三样：吉凶倾向、时间范围、影响程度高中低")
+    fun taskPerItem() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        listOf("吉凶倾向", "关键事件", "时间范围", "大运、流年或年龄段", "影响程度（高、中、低）")
+            .forEach { assertTrue(task.contains(it), "任务段缺逐项交代要素：$it") }
+    }
+
+    @Test
+    @DisplayName("任务段末尾落到方位、行业、行事时机与风险点")
+    fun taskAdvice() {
+        val task = prompt().substringBefore("以下为盘面数据。")
+        listOf("性格与命局特点", "改善建议与应对策略", "方位", "行业", "行事时机", "风险点")
+            .forEach { assertTrue(task.contains(it), "任务段缺建议要素：$it") }
+    }
+
+    @Test
+    @DisplayName("九节清单已撤下：任务段不再有分节标题与分档输出")
+    fun noSectionList() {
+        val task = prompt().substringBefore("以下为盘面数据。")
         listOf(
-            "# 八字命盘分析",
-            "## 一、先校盘",
-            "## 二、判读主链",
-            "## 三、判读纪律",
-            "## 四、分析维度",
-            "## 五、关键事件",
-            "## 六、建议要能执行",
-            "## 七、流月只在落到月份时用",
-            "## 八、不确定就说不确定",
-            "## 九、输出分两段"
-        ).forEach { title -> assertTrue(text.contains(title), "缺少任务章节：$title") }
-    }
-
-    @Test
-    @DisplayName("任务段给出六步主链：月令取格到岁运引动，一步不少")
-    fun pipeline() {
-        val text = prompt()
-        listOf("月令取格", "论成败救应", "取用神", "看刑冲合害", "落宫位", "岁运引动").forEach {
-            assertTrue(text.contains(it), "主链缺少一步：$it")
-        }
-        // 主链要引用古籍次序，不是凭空排的
-        assertTrue(text.contains("先看提纲为重"), "主链未引《渊海子平》次序")
-        assertTrue(text.contains("八字用神，专求月令"), "主链未引《子平真诠》")
-    }
-
-    @Test
-    @DisplayName("任务段点明八维度、事件四项、判读纪律与分档输出")
-    fun taskRequirements() {
-        val text = prompt()
-        listOf("性格", "事业", "财运", "婚恋", "子女", "六亲", "健康", "学业").forEach { dim ->
-            assertTrue(text.contains(dim), "任务段缺少维度：$dim")
-        }
-        listOf("时间", "吉凶", "程度", "影响", "决定性").forEach {
-            assertTrue(text.contains(it), "任务段缺少事件要素：$it")
-        }
-        // 这几条是被真实输出逼出来的纪律，缺一条模型就会往该方向跑偏
-        listOf("置信度", "多路闭环", "技术有利不等于必然发生", "不用现实结果反推",
-               "术语要落地", "神煞只作旁证", "不要复述盘面").forEach {
-            assertTrue(text.contains(it), "任务段缺纪律：$it")
-        }
-        // 分档：先给一段，末尾问要不要展开
-        assertTrue(text.contains("第一段"), "任务段缺分档输出的第一段要求")
-        assertTrue(text.contains("要不要展开"), "任务段未要求末尾征询是否展开")
+            "## 一、先校盘", "## 二、判读主链", "## 三、判读纪律", "## 四、分析维度",
+            "## 五、关键事件", "## 六、建议要能执行", "## 七、流月只在落到月份时用",
+            "## 八、不确定就说不确定", "## 九、输出分两段",
+            "第一段", "第二段", "要不要展开", "置信度", "多路闭环"
+        ).forEach { assertFalse(task.contains(it), "任务段仍残留旧指令：$it") }
     }
 
     @Test
@@ -136,18 +157,16 @@ class AiPromptBuilderTest {
     }
 
     @Test
-    @DisplayName("维度与建议都归入第二段，不与第一段的篇幅要求打架")
-    fun stagedOutput() {
-        val task = prompt().substringBefore("以下为盘面数据。")
-        assertTrue(
-            task.contains("八项必答与选答都属于第九节的**第二段**"),
-            "未说明必答维度归第二段"
-        )
-        assertTrue(
-            task.contains("这一节属于第二段，第一段只给结论与时间轴"),
-            "未说明建议归第二段"
-        )
-        assertTrue(task.contains("不要在没被要求时把十项一次铺开"), "缺第一段的篇幅约束")
+    @DisplayName("指令与数据之间只隔一条分隔线与一句过渡，不夹其他指令")
+    fun taskThenData() {
+        val text = prompt()
+        val task = text.substringBefore("以下为盘面数据。")
+        // 用户要求「不要掺杂其他内容」：指令就这一段话，后面直接接盘面。
+        // 分隔线保留，否则表头会紧贴上句被当成行文续写。
+        assertTrue(task.trimEnd().endsWith("---"), "指令与数据之间缺分隔线")
+        val between = task.substringAfter("需规避的风险点。").trim()
+        assertEquals("---", between, "指令与盘面之间夹了额外内容：$between")
+        assertTrue(text.substringAfter("以下为盘面数据。").contains("## 排盘"), "盘面未紧随指令")
     }
 
     /** 因子由 app 层从分析层取出后传入。 */

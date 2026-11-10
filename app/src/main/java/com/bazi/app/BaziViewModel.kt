@@ -37,7 +37,7 @@ data class ChartBundle(
     val chart: BaziChart,
     /** 分析结果目前只用于命盘表的神煞行；旺衰、格局、调候不再上屏。 */
     val analysis: AnalysisResult,
-    /** 盘面文本：任务段 + 排盘、大运、流年、流月四节数据。可直接整段复制给大模型。 */
+    /** 盘面文本：指令段 + 排盘、大运、流年、流月四节数据。可直接整段复制给大模型。 */
     val aiPrompt: String
 )
 
@@ -293,7 +293,7 @@ private fun structureFactors(chart: BaziChart, analysis: AnalysisResult): Struct
     val mainStem = HiddenStemTable.mainStem(monthZhi)
     val gans = chart.pillars.map { it.gan }
     val names = arrayOf("年", "月", "日", "时")
-    // 透干要写清落在哪一柱：任务段第一步要求「格神从哪一柱透出」，
+    // 透干要写清落在哪一柱：判读时「格神从哪一柱透出」是绕不过去的一步，
     // 只给干名，模型还得回头去四柱表里数一遍。
     val revealed = gans.mapIndexedNotNull { i, gan ->
         if (gan in hidden) names[i] + "干" + gan.cn else null
